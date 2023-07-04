@@ -19,3 +19,6 @@ circuit_definitions = {git = "https://github.com/matter-labs/zkevm_test_harness.
 bincode = "*"
 colored = "2.0"
 serde_json = "*"
+serde = {version = "1", features = ["derive"]}
+clap = { version = "4.2.4", features = ["derive"] }
+anyhow = "*"
