@@ -31,4 +31,5 @@ cargo run -- --batch 98718 --network testnet
 Currently this CLI verification keys hardcoded, but the plan is to extend this tool to:
 * support all the 13 different circuits (and not only the 3 that are currently hardcoded)
 * regenerate / compare the verification keys (currently they are submitted in the repo, but we should have the option to regenerate based on current circuits design)
+* compare state roots before and after given batch with current prover and boojum
 * add more debugging / explanations
