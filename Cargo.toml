@@ -22,3 +22,6 @@ serde_json = "*"
 serde = {version = "1", features = ["derive"]}
 clap = { version = "4.2.4", features = ["derive"] }
 anyhow = "*"
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+
