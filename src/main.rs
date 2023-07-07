@@ -4,6 +4,7 @@ use colored::Colorize;
 use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
+use std::io::Cursor;
 
 use boojum::{
     cs::implementations::{
@@ -27,7 +28,13 @@ pub enum FriProofWrapper {
 struct Cli {
     #[arg(long)]
     /// Path to the .bin file with the proof
-    proof: String,
+    proof: Option<String>,
+    #[arg(long)]
+    /// Batch number to check proof for
+    batch: Option<usize>,
+    #[arg(long, default_value = "mainnet")]
+    /// Batch number to check proof for
+    network: String,
 }
 
 /// Reads proof (in FriProofWrapper format) from a given bin file.
@@ -68,10 +75,55 @@ pub fn verify_scheduler_proof(proof_path: &str) -> anyhow::Result<String> {
     }
 }
 
-fn main() {
+/// Download the proof file if it exists and saves locally
+async fn fetch_proof_from_storage(batch_number: usize, network: String) -> Result<String, Box<dyn std::error::Error>> {
+
+    println!("Downloading proof for batch {} on network {}", batch_number, network);
+
+    let client = reqwest::Client::new();
+    let url = format!("https://storage.googleapis.com/zksync-era-{}-proofs/proofs_fri/proof_{}.bin", network, batch_number);
+    let proof = client.get(url).send()
+        .await?;
+
+    if proof.status().is_success() {
+        let file_path = format!("./downloaded_proofs/proof_{}_{}.bin", network, batch_number);
+
+        let mut file = std::fs::File::create(file_path.clone())?;
+        let mut content =  Cursor::new(proof.bytes().await?);
+        std::io::copy(&mut content, &mut file)?;
+
+        return Ok(file_path);
+    } else {
+        return Err(format!("Proof for batch {} on network {} not found", batch_number, network).into());
+    }
+}
+
+#[tokio::main]
+async fn main() {
     let opt = Cli::parse();
 
-    let result = verify_scheduler_proof(&opt.proof);
+    let batch_number = &opt.batch;
+    let proof;
+    let network = &opt.network;
+
+    if network.to_string() != "testnet" && network.to_string() != "mainnet" {
+        println!("Invalid network name. Please use 'testnet' or 'mainnet'");
+        return
+    }
+
+    if !batch_number.is_none() {
+        let proof_response = fetch_proof_from_storage(batch_number.unwrap(), network.to_string()).await;
+
+        if let Err(_err) = proof_response {
+            println!("{}", _err);
+            return
+        }
+        proof = proof_response.unwrap()
+    } else {
+        proof = (&opt.proof).clone().unwrap();
+    }
+    
+    let result = verify_scheduler_proof(&proof);
 
     println!(
         "Proof result: {}",
