@@ -98,8 +98,6 @@ async fn main() {
 
         let response = requests::fetch_batch_info(batch_number.unwrap(), network.to_string()).await;
 
-        println!("{:?}", response);
-
         let proof_response = requests::fetch_proof_from_storage(batch_number.unwrap(), network.to_string()).await;
 
         if let Err(_err) = proof_response {
@@ -138,7 +136,7 @@ mod test {
     use super::*;
     #[test]
     fn test_scheduler_proof() {
-        verify_scheduler_proof("scheduler_proof/proof_52272951.bin").expect("FAILED");
+        verify_scheduler_proof("example_proofs/proof_52272951.bin").expect("FAILED");
     }
     #[test]
 

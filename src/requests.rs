@@ -3,13 +3,13 @@ use std::fs;
 use std::io::Cursor;
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct L1BatchJson {
+pub struct L1BatchJson {
     commitTxHash: String,
     proveTxHash: String,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct JSONRPCResponse {
+pub struct JSONRPCResponse {
     result: L1BatchJson,
 }
 
@@ -75,21 +75,20 @@ pub async fn fetch_l1_info(tx_hash: String, rpc_url: String) -> Result<String, B
 
     let client = reqwest::Client::new();
 
-    let response = client.post(rpc_url)
+    let response = client.post(rpc_url.to_string())
     .header("Content-Type", "application/json")
     .body(format!(r#"{{
             "jsonrpc": "2.0",
             "method": "zks_getL1BatchDetails",
             "params": [{}, false],
             "id": "1"
-        }}"#, batch_number)).send()
+        }}"#, tx_hash)).send()
         .await?;
 
     if response.status().is_success() {
-        //println!("{:?}", response.text().await?);
         let json = response.json::<JSONRPCResponse>().await?;
-        return Ok(format!("{}", json.result.proveTxHash));
+        return Ok("ok".to_string());
     } else {
-        return Err(format!("Failed to fetch information from zkSync Era RPC for batch {} on network {}", batch_number, network).into());
+        return Err(format!("Failed to fetch information for transaction {} from Ethereum rpc Era {}", tx_hash, rpc_url).into());
     }
 }
