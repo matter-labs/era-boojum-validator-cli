@@ -4,25 +4,29 @@ This is an experimental command line tool to verify the proofs for zkSync Era up
 
 Know more about the Boojum proof system in our blog post: xxxxxx
 
+# Limitation
+
+This repository relies on some other repos as depencies that are not yet public (zkevm_circuits and zkevm_test_harness). We plan to open them pretty soon, but meanwhile you can run this CLI with the binary file available at /binary folder.
+
 # Running the CLI
 
 You can verify that committed proofs are valid by running:
 
 ```shell
-cargo run -- --batch <batch_number>
+./binary/era-boojum-validator-cli --batch <batch_number>
 ```
 
 Full example
 
 ```shell
-cargo run -- --batch 98718 --network testnet
+./binary/era-boojum-validator-cli --batch 98718 --network testnet
 ```
 
 ## CLI Options
 
 ```shell
 --batch - The L1 batch number you want to verify the generated proof
---network - Along with batch number, defines if you want to verify a proof for Era testnet, or mainnet. It defaults to mainnet.
+--network - Along with batch number, defines if you want to verify a proof for Era testnet, or mainnet. It defaults to mainnet. Accepts "mainnet" or "testnet"
 --proof - Optionally you can pass the file path for a local proof to be verified. The CLI will use the batch option if both are passed.
 ```
 

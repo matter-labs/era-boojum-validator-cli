@@ -1,7 +1,9 @@
+#![feature(generic_const_exprs)]
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
 use clap::Parser;
 use colored::Colorize;
 use serde::Deserialize;
+use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::io::Cursor;
@@ -86,6 +88,7 @@ async fn fetch_proof_from_storage(batch_number: usize, network: String) -> Resul
         .await?;
 
     if proof.status().is_success() {
+        fs::create_dir_all("./downloaded_proofs")?;
         let file_path = format!("./downloaded_proofs/proof_{}_{}.bin", network, batch_number);
 
         let mut file = std::fs::File::create(file_path.clone())?;
