@@ -1,3 +1,4 @@
+#![feature(generic_const_exprs)]
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
 use clap::Parser;
 use colored::Colorize;
