@@ -380,10 +380,10 @@ async fn main() {
     // recursion parameters, for now hardcoded
 
     let node_layer_vk_commitment = [
-        GoldilocksField::from_u64_unchecked(0),
-        GoldilocksField::from_u64_unchecked(0),
-        GoldilocksField::from_u64_unchecked(0),
-        GoldilocksField::from_u64_unchecked(0),
+        GoldilocksField::from_u64_unchecked(0x5a3ef282b21e12fe),
+        GoldilocksField::from_u64_unchecked(0x1f4438e5bb158fc5),
+        GoldilocksField::from_u64_unchecked(0x060b160559c5158c),
+        GoldilocksField::from_u64_unchecked(0x6389d62d9fe3d080),
     ];
 
     let mut recursion_node_verification_key_hash = [0u8; 32];
@@ -395,12 +395,12 @@ async fn main() {
         dst.copy_from_slice(&le_bytes[..]);
         dst.reverse();
     }
-
+    
     let leaf_layer_parameters_commitment = [
-        GoldilocksField::from_u64_unchecked(0),
-        GoldilocksField::from_u64_unchecked(0),
-        GoldilocksField::from_u64_unchecked(0),
-        GoldilocksField::from_u64_unchecked(0),
+        GoldilocksField::from_u64_unchecked(0xb4338bf5dd05f4bc),
+        GoldilocksField::from_u64_unchecked(0x2df17763b445b8e0),
+        GoldilocksField::from_u64_unchecked(0xb7b7138fdf1d981c),
+        GoldilocksField::from_u64_unchecked(0xe9792eb109ab8db7),
     ];
 
     let mut leaf_layer_parameters_hash = [0u8; 32];
