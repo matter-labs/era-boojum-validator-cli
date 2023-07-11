@@ -96,14 +96,30 @@ async fn main() {
 
     if !batch_number.is_none() {
 
-        let response = requests::fetch_batch_info(batch_number.unwrap(), network.to_string()).await;
-
         let proof_response = requests::fetch_proof_from_storage(batch_number.unwrap(), network.to_string()).await;
 
         if let Err(_err) = proof_response {
             println!("{}", _err);
             return
         }
+
+        if l1_rpc.is_none() {
+            println!("Skipping building batch information from Ethereum as no RPC url was provided");
+        } else {
+            let tx_hash = requests::fetch_batch_info(batch_number.unwrap(), network.to_string()).await;
+            if let Err(_err) = tx_hash {
+                println!("{}", _err);
+                return
+            }
+            let l1_batch_info = requests::fetch_l1_info(tx_hash.unwrap(), l1_rpc.clone().unwrap(), batch_number.unwrap(), network.to_string()).await;
+            if let Err(_err) = l1_batch_info {
+                println!("{}", _err);
+                return
+            }
+
+            //TODO: Reform block header with proof information and compare with L1 information
+        }
+       
         proof = proof_response.unwrap()
     } else {
         proof = (&opt.proof).clone().unwrap();
