@@ -4,28 +4,52 @@ use std::io::Cursor;
 use ethers::abi::Function;
 use boojum::field::goldilocks::GoldilocksField;
 
+pub async fn fetch_data_from_storage(
+    data_type: &str,
+    batch_number: u64,
+    network: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+
+    let expected_file_path;
+    let url;
+    if data_type == "proof" {
+        expected_file_path = format!("./downloaded_data/proof_{}_{}.bin", network, batch_number);
+        url = format!("https://storage.googleapis.com/zksync-era-{}-proofs/proofs_fri/proof_{}.bin", network, batch_number)
+    } else if data_type == "aux_data" {
+        expected_file_path = format!("./downloaded_data/aux_{}_{}.bin", network, batch_number);
+        url = format!("https://storage.googleapis.com/zksync-era-{}-proofs/scheduler_witness_jobs_fri/aux_output_witness_{}.bin", network, batch_number)
+    } else {
+        return Err("Invalid type to fetch".into());
+    }
+
+    let path = std::path::Path::new(&expected_file_path);
+    if path.exists() {
+        return Ok(expected_file_path);
+    }
+
+    let client = reqwest::Client::new();
+    let data = client.get(url).send().await?;
+
+    if data.status().is_success() {
+        fs::create_dir_all("./downloaded_data")?;
+
+        let mut file = std::fs::File::create(expected_file_path.clone())?;
+        let mut content = Cursor::new(data.bytes().await?);
+        std::io::copy(&mut content, &mut file)?;
+
+        return Ok(expected_file_path);
+    } else {
+        return Err(format!("Data for batch {} on network {} not found", batch_number, network).into());
+    }
+}
+
+
 /// Download the proof file if it exists and saves locally
 pub async fn fetch_proof_from_storage(batch_number: u64, network: &str) -> Result<String, Box<dyn std::error::Error>> {
 
     println!("Downloading proof for batch {} on network {}", batch_number, network);
 
-    let client = reqwest::Client::new();
-    let url = format!("https://storage.googleapis.com/zksync-era-{}-proofs/proofs_fri/proof_{}.bin", network, batch_number);
-    let proof = client.get(url).send()
-        .await?;
-
-    if proof.status().is_success() {
-        fs::create_dir_all("./downloaded_proofs")?;
-        let file_path = format!("./downloaded_proofs/proof_{}_{}.bin", network, batch_number);
-
-        let mut file = std::fs::File::create(file_path.clone())?;
-        let mut content =  Cursor::new(proof.bytes().await?);
-        std::io::copy(&mut content, &mut file)?;
-
-        return Ok(file_path);
-    } else {
-        return Err(format!("Proof for batch {} on network {} not found", batch_number, network).into());
-    }
+    fetch_data_from_storage(&"proof", batch_number, network).await
 }
 
 /// Download the proof file if it exists and saves locally
@@ -33,23 +57,12 @@ pub async fn fetch_aux_data_from_storage(batch_number: u64, network: &str) -> Re
 
     println!("Downloading aux data for batch {} on network {}", batch_number, network);
 
-    let client = reqwest::Client::new();
-    let url = format!("https://storage.googleapis.com/zksync-era-{}-proofs/scheduler_witness_jobs_fri/aux_output_witness_{}.bin", network, batch_number);
+    let aux_path = fetch_data_from_storage(&"aux_data", batch_number, network).await;
 
-    // let data = include_bytes!("keys/scheduler_witness_jobs_fri_aux_output_witness_74249.bin");
-    
-    // let result: AuxOutputWitnessWrapper = bincode::deserialize(&data[..]).unwrap();
-        // return Ok(result);
+    let bytes = std::fs::read(aux_path.unwrap())?;
 
-    let aux_data = client.get(url).send()
-        .await?;
-
-    if aux_data.status().is_success() {
-        let result: AuxOutputWitnessWrapper = bincode::deserialize(&aux_data.bytes().await?[..]).unwrap();
-        return Ok(result);
-    } else {
-        return Err(format!("Proof for batch {} on network {} not found", batch_number, network).into());
-    }
+    let result: AuxOutputWitnessWrapper = bincode::deserialize(&bytes[..]).unwrap();
+    Ok(result)
 }
 
 pub struct BatchL1Data {
@@ -81,23 +94,10 @@ pub async fn fetch_l1_data(batch_number: u64, network: &str, rpc_url: &str) -> R
     let function = contract_abi.functions_by_name("commitBlocks").unwrap()[0].clone();
     let previous_batch_number = batch_number - 1;
     let address = Address::from_str(DIAMOND_PROXY).unwrap();
-    // let get_block_hash_function = contract.functions_by_name("storedBlockHash").unwrap()[0].clone();
-    // let get_bootloader_code_hash_function = contract.functions_by_name("getL2BootloaderBytecodeHash").unwrap()[0].clone();
-    // let get_default_aa_code_hash_function = contract.functions_by_name("getL2DefaultAccountBytecodeHash").unwrap()[0].clone();
-
     
-
-    let event = contract_abi.events_by_name("BlockCommit").unwrap()[0].clone();
     let mut roots = vec![];
     let mut l1_block_number = 0;
     for b_number in [previous_batch_number, batch_number] {
-        // let filter = Filter::new().from_block(16621828).to_block(BlockNumber::Latest).address(address).topic0(event.signature()).topic1(U256::from(b_number as u64));
-        // let mut events = client.get_logs(&filter).await.map_err(|_| format!("failed to find commit transaction for block {}", b_number))?;
-        // if events.len() != 1 {
-        //     return Err(format!("failed to find commit transaction for block {}", b_number));
-        // }
-        // let event = events.pop().unwrap();
-        // let tx_hash = event.transaction_hash.unwrap();
 
         let commit_tx = fetch_batch_commit_tx(b_number, network).await.map_err(|_| format!("failed to find commit transaction for block {}", b_number)).unwrap();
         
