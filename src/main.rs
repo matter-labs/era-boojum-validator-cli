@@ -90,13 +90,6 @@ async fn main() {
     let network = opt.network.clone().to_string();
     let l1_rpc = opt.l1_rpc;
 
-   // let batch_number = 74249u64;
-    
-    // if network != "mainnet" {
-    //     println!("Invalid network name. For now only 'mainnet' is supported");
-    //     return
-    // }
-
     println!("{}","Fetching and validating the proof itself".on_blue());
 
     let proof_response = requests::fetch_proof_from_storage(batch_number, &network).await;
