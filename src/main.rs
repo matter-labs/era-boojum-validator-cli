@@ -1,12 +1,16 @@
 #![feature(generic_const_exprs)]
+#![feature(array_chunks)]
+
+use boojum::field::U64Representable;
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
 use clap::Parser;
 use colored::Colorize;
 use serde::Deserialize;
-use std::fs;
 use std::fs::File;
 use std::io::Read;
-use std::io::Cursor;
+mod requests;
+
+pub mod block_header;
 
 use boojum::{
     cs::implementations::{
@@ -28,15 +32,15 @@ pub enum FriProofWrapper {
 #[derive(Debug, Parser)]
 #[command(author = "Matter Labs", version, about = "Boojum CLI verifier", long_about = None)]
 struct Cli {
-    #[arg(long)]
-    /// Path to the .bin file with the proof
-    proof: Option<String>,
-    #[arg(long)]
+    #[arg(long, default_value = "74249")]
     /// Batch number to check proof for
-    batch: Option<usize>,
+    batch: u64,
     #[arg(long, default_value = "mainnet")]
     /// Batch number to check proof for
     network: String,
+    #[arg(long)]
+    // RPC endpoint to use to fetch L1 information
+    l1_rpc: Option<String>
 }
 
 /// Reads proof (in FriProofWrapper format) from a given bin file.
@@ -50,7 +54,7 @@ pub fn proof_from_file<T: for<'a> Deserialize<'a>>(proof_path: &str) -> T {
 }
 
 /// Verifies a given proof from "Scheduler" circuit.
-pub fn verify_scheduler_proof(proof_path: &str) -> anyhow::Result<String> {
+pub fn verify_scheduler_proof(proof_path: &str) -> anyhow::Result<Vec<GoldilocksField>> {
     let scheduler_key: ZkSyncRecursionLayerStorage<
         VerificationKey<GoldilocksField, BaseProofsTreeHasher>,
     > = serde_json::from_slice(include_bytes!("keys/verification_scheduler_key.json")).unwrap();
@@ -62,13 +66,14 @@ pub fn verify_scheduler_proof(proof_path: &str) -> anyhow::Result<String> {
             ConcreteSchedulerCircuitBuilder::dyn_verifier_builder::<GoldilocksExt2>();
 
         let verifier = verifier_builder.create_verifier();
+        let proof = proof.into_inner();
         let result = verifier.verify::<BaseProofsTreeHasher, GoldilocksPoisedon2Transcript, NoPow>(
             (),
             &scheduler_key.into_inner(),
-            &proof.into_inner(),
+            &proof,
         );
         if result {
-            Ok("Pass".to_string())
+            Ok(proof.public_inputs)
         } else {
             anyhow::bail!("Invalid proof")
         }
@@ -77,65 +82,199 @@ pub fn verify_scheduler_proof(proof_path: &str) -> anyhow::Result<String> {
     }
 }
 
-/// Download the proof file if it exists and saves locally
-async fn fetch_proof_from_storage(batch_number: usize, network: String) -> Result<String, Box<dyn std::error::Error>> {
-
-    println!("Downloading proof for batch {} on network {}", batch_number, network);
-
-    let client = reqwest::Client::new();
-    let url = format!("https://storage.googleapis.com/zksync-era-{}-proofs/proofs_fri/proof_{}.bin", network, batch_number);
-    let proof = client.get(url).send()
-        .await?;
-
-    if proof.status().is_success() {
-        fs::create_dir_all("./downloaded_proofs")?;
-        let file_path = format!("./downloaded_proofs/proof_{}_{}.bin", network, batch_number);
-
-        let mut file = std::fs::File::create(file_path.clone())?;
-        let mut content =  Cursor::new(proof.bytes().await?);
-        std::io::copy(&mut content, &mut file)?;
-
-        return Ok(file_path);
-    } else {
-        return Err(format!("Proof for batch {} on network {} not found", batch_number, network).into());
-    }
-}
-
 #[tokio::main]
 async fn main() {
     let opt = Cli::parse();
 
-    let batch_number = &opt.batch;
-    let proof;
-    let network = &opt.network;
+    let batch_number = opt.batch;
+    let network = opt.network.clone().to_string();
+    let l1_rpc = opt.l1_rpc;
 
-    if network.to_string() != "testnet" && network.to_string() != "mainnet" {
-        println!("Invalid network name. Please use 'testnet' or 'mainnet'");
+    println!("{}","Fetching and validating the proof itself".on_blue());
+
+    let proof_response = requests::fetch_proof_from_storage(batch_number, &network).await;
+
+    if let Err(_err) = proof_response {
+        println!("{}", _err);
         return
     }
-
-    if !batch_number.is_none() {
-        let proof_response = fetch_proof_from_storage(batch_number.unwrap(), network.to_string()).await;
-
-        if let Err(_err) = proof_response {
-            println!("{}", _err);
-            return
-        }
-        proof = proof_response.unwrap()
-    } else {
-        proof = (&opt.proof).clone().unwrap();
-    }
+    let proof_path = proof_response.unwrap();
     
-    let result = verify_scheduler_proof(&proof);
+    let valid_public_inputs = verify_scheduler_proof(&proof_path);
+    if valid_public_inputs.is_err() {
+        println!("Proof is {}", "INVALID".red());
+        return;
+    } else {
+        println!("Proof is {}", "VALID".green());
+    }
+    println!("\n");
 
-    println!(
-        "Proof result: {}",
-        if result.is_ok() {
-            "PASS".green()
-        } else {
-            "FAIL".red()
+    if l1_rpc.is_none() {
+        println!("{}", "Skipping building batch information from Ethereum as no RPC url was provided.".yellow());
+    } else {
+        println!("{}", "Fetching data from Ethereum L1 for state roots, bootloader and default Account Abstraction parameters".on_blue());
+
+        let l1_data = requests::fetch_l1_data(batch_number, &network, &l1_rpc.unwrap()).await;
+        if l1_data.is_err() {
+            if let Err(_err) = l1_data {
+                println!("{}", _err);
+                return
+            }
+            println!("Failed to get data from L1");
+            return;
         }
-    );
+    
+        let l1_data = l1_data.unwrap();
+    
+        println!("{}", "Fetching auxilary block data".on_blue());
+        let aux_data = requests::fetch_aux_data_from_storage(batch_number, &network).await;
+        if aux_data.is_err() {
+            println!("Failed to get auxiliary data");
+            return;
+        }
+        println!("\n");
+
+        let aux_data = aux_data.unwrap();
+
+        // while we do not prove all the blocks we use placeholders for non-state related parts
+        // of the previous block
+        let previous_block_meta_hash = [0u8; 32];
+        let previous_block_aux_hash = [0u8; 32];
+
+        use self::block_header::*;
+        use sha3::{Digest, Keccak256};
+
+        let previous_passthrough_data = BlockPassthroughData {
+            per_shard_states: [
+                PerShardState {
+                    enumeration_counter: l1_data.previous_enumeration_counter,
+                    state_root: l1_data.previous_root.try_into().unwrap(),
+                },
+                // porter shard is not used
+                PerShardState {
+                    enumeration_counter: 0,
+                    state_root: [0u8; 32],
+                },
+            ]
+        };
+        let previous_passthrough_data_hash = to_fixed_bytes(Keccak256::digest(&previous_passthrough_data.into_flattened_bytes()).as_slice());
+
+        let previous_block_content_hash = BlockContentHeader::formal_block_hash_from_partial_hashes(
+            previous_passthrough_data_hash,
+            previous_block_meta_hash,
+            previous_block_aux_hash,
+        );
+
+        let new_passthrough_data = BlockPassthroughData {
+            per_shard_states: [
+                PerShardState {
+                    enumeration_counter: l1_data.new_enumeration_counter,
+                    state_root: l1_data.new_root.try_into().unwrap(),
+                },
+                // porter shard is not used
+                PerShardState {
+                    enumeration_counter: 0,
+                    state_root: [0u8; 32],
+                },
+            ]
+        };
+
+        let new_meta_params = BlockMetaParameters {
+            zkporter_is_available: false,
+            bootloader_code_hash: l1_data.bootloader_hash,
+            default_aa_code_hash: l1_data.default_aa_hash,
+        };
+
+        let aux_data = aux_data.0;
+
+        let new_aux_params = BlockAuxilaryOutput {
+            l1_messages_linear_hash: aux_data.l1_messages_linear_hash,
+            rollup_state_diff_for_compression: aux_data.rollup_state_diff_for_compression,
+            bootloader_heap_initial_content: aux_data.bootloader_heap_initial_content,
+            events_queue_state: aux_data.events_queue_state,
+        };
+
+        let new_header = BlockContentHeader {
+            block_data: new_passthrough_data,
+            block_meta: new_meta_params,
+            auxilary_output: new_aux_params,
+        };
+        let this_block_content_hash = new_header.into_formal_block_hash().0;
+
+        let mut flattened_public_input = vec![];
+        flattened_public_input.extend(previous_block_content_hash);
+        flattened_public_input.extend(this_block_content_hash);
+        // recursion parameters, for now hardcoded
+
+        let node_layer_vk_commitment = [
+            GoldilocksField::from_u64_unchecked(0x5a3ef282b21e12fe),
+            GoldilocksField::from_u64_unchecked(0x1f4438e5bb158fc5),
+            GoldilocksField::from_u64_unchecked(0x060b160559c5158c),
+            GoldilocksField::from_u64_unchecked(0x6389d62d9fe3d080),
+        ];
+
+        let mut recursion_node_verification_key_hash = [0u8; 32];
+        for (dst, src) in recursion_node_verification_key_hash
+            .array_chunks_mut::<8>()
+            .zip(node_layer_vk_commitment.iter())
+        {
+            let le_bytes = src.to_reduced_u64().to_le_bytes();
+            dst.copy_from_slice(&le_bytes[..]);
+            dst.reverse();
+        }
+        
+        let leaf_layer_parameters_commitment = [
+            GoldilocksField::from_u64_unchecked(0xb4338bf5dd05f4bc),
+            GoldilocksField::from_u64_unchecked(0x2df17763b445b8e0),
+            GoldilocksField::from_u64_unchecked(0xb7b7138fdf1d981c),
+            GoldilocksField::from_u64_unchecked(0xe9792eb109ab8db7),
+        ];
+
+        let mut leaf_layer_parameters_hash = [0u8; 32];
+        for (dst, src) in leaf_layer_parameters_hash
+            .array_chunks_mut::<8>()
+            .zip(leaf_layer_parameters_commitment.iter())
+        {
+            let le_bytes = src.to_reduced_u64().to_le_bytes();
+            dst.copy_from_slice(&le_bytes[..]);
+            dst.reverse();
+        }
+
+        flattened_public_input.extend(recursion_node_verification_key_hash);
+        flattened_public_input.extend(leaf_layer_parameters_hash);
+
+        let input_keccak_hash = to_fixed_bytes(Keccak256::digest(&flattened_public_input).as_slice());
+        let mut public_inputs = vec![];
+        use boojum::field::PrimeField;
+        use zkevm_circuits::scheduler::NUM_SCHEDULER_PUBLIC_INPUTS;
+        let take_by = GoldilocksField::CAPACITY_BITS / 8;
+
+        for chunk in input_keccak_hash
+            .chunks_exact(take_by)
+            .take(NUM_SCHEDULER_PUBLIC_INPUTS)
+        {
+            let mut buffer = [0u8; 8];
+            buffer[1..].copy_from_slice(chunk);
+            let as_field_element = GoldilocksField::from_u64_unchecked(u64::from_be_bytes(buffer));
+            public_inputs.push(as_field_element);
+        }
+   
+        let valid_public_inputs = valid_public_inputs.unwrap();
+
+        println!("{} ", "Comparing public input from Ethereum with input for boojum".on_blue());
+        println!("Recomputed public input from current prover using L1 data is {}", format!("{:?}", public_inputs).bright_blue());
+        println!("Boojum proof's public input is {}", format!("{:?}", valid_public_inputs).green());
+
+        if public_inputs == valid_public_inputs {
+            println!("Boojum's proof is {}", "VALID".green());
+        } else {
+            println!("Boojum's proof is {}", "INVALID".red());
+        }
+        return;
+    } 
+        
+    println!("\n");
+    
 }
 
 #[cfg(test)]
@@ -153,7 +292,7 @@ mod test {
     use super::*;
     #[test]
     fn test_scheduler_proof() {
-        verify_scheduler_proof("scheduler_proof/proof_52272951.bin").expect("FAILED");
+        verify_scheduler_proof("example_proofs/proof_52272951.bin").expect("FAILED");
     }
     #[test]
 
