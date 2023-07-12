@@ -1,4 +1,4 @@
 /target
-/downloaded_proofs/*
-!downloaded_proofs/.gitkeep 
+/downloaded_data/*
+!downloaded_data/.gitkeep 
 .DS_Store
