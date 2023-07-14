@@ -2,15 +2,15 @@
 
 [![Logo](eraLogo.png)](https://zksync.io/)
 # 
-This is an experimental command line tool to verify the proofs for zkSync Era updated proof system, Boojum, which uses FRI based proofs.
+This is an experimental command line tool to verify the proofs for zkSync Era's updated proof system, Boojum.
 
 The CLI fetches Boojum proofs for a given batch, and also L1 data from our current prover, so it can compare both and validate they are equivalent.
 
-Know more about the Boojum proof system in our blog post: [https://blog.matter-labs.io/zksyncera-boojum-fb9b8bd31144](https://blog.matter-labs.io/zksyncera-boojum-fb9b8bd31144)
+Learn more about the Boojum proof system in our blog post: [https://blog.matter-labs.io/zksyncera-boojum-fb9b8bd31144](https://blog.matter-labs.io/zksyncera-boojum-fb9b8bd31144)
 
 # Limitation
 
-This repository relies on some other repos as depencies that are not yet public (zkevm_circuits and zkevm_test_harness). We plan to open them pretty soon, but meanwhile you can run this CLI with the binary file available at /bin folder.
+This repository temporarily relies on some dependencies that are not yet public. We will open these soon, but meanwhile you can run this CLI with the binary file available in the /bin folder.
 
 # Running the CLI
 
@@ -30,8 +30,8 @@ Full example
 
 ```shell
 --batch - The L1 batch number you want to verify the generated proof
---network - Along with batch number, defines if you want to verify a proof for Era testnet, or mainnet. It defaults to mainnet. Accepts "mainnet" or "testnet"
---l1_rpc - The RPC url if you want to CLI to also reconstruct the input using data from Ethereum L1 for our current prover, and compare with the ones for the new prover (basically confirming that both proofs are equivalent).
+--network - Along with batch number, defines if you want to verify a proof for Era testnet or mainnet. It defaults to mainnet. Accepts "mainnet" or "testnet"
+--l1_rpc - The RPC url required if you want the CLI to also reconstruct the input using data from Ethereum for our current prover, and compare with the ones for the new prover (basically confirming that both proofs are equivalent).
 --proof - Optionally you can pass the file path for a local proof to be verified. The CLI will use the batch option if both are passed.
 ```
 # Future plans
