@@ -86,6 +86,7 @@ pub async fn fetch_l1_data(batch_number: u64, network: &str, rpc_url: &str) -> R
     use std::str::FromStr;
     use colored::Colorize;
 
+    #[allow(non_snake_case)]
     let DIAMOND_PROXY = if network.to_string() == "mainnet" { "32400084c286cf3e17e7b677ea9583e60a000324" } else { "1908e2BF4a88F91E4eF0DC72f02b8Ea36BEa2319" };
 
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
@@ -145,6 +146,7 @@ pub struct JSONL2RPCResponse {
     result: L1BatchJson,
 }
 
+#[allow(non_snake_case)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct L1BatchJson {
     commitTxHash: String,

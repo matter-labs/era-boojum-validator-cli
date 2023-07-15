@@ -9,6 +9,7 @@ use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
 mod requests;
+mod params;
 
 pub mod block_header;
 
@@ -32,7 +33,7 @@ pub enum FriProofWrapper {
 #[derive(Debug, Parser)]
 #[command(author = "Matter Labs", version, about = "Boojum CLI verifier", long_about = None)]
 struct Cli {
-    #[arg(long, default_value = "74249")]
+    #[arg(long, default_value = "106971")]
     /// Batch number to check proof for
     batch: u64,
     #[arg(long, default_value = "mainnet")]
@@ -90,6 +91,11 @@ async fn main() {
     let network = opt.network.clone().to_string();
     let l1_rpc = opt.l1_rpc;
 
+    if network != "mainnet" && network != "testnet" {
+        println!("Please use network name `{}` or `{}`", "mainnet".yellow(), "testnet".yellow());
+        return;
+    }
+
     println!("{}","Fetching and validating the proof itself".on_blue());
 
     let proof_response = requests::fetch_proof_from_storage(batch_number, &network).await;
@@ -112,6 +118,19 @@ async fn main() {
     if l1_rpc.is_none() {
         println!("{}", "Skipping building batch information from Ethereum as no RPC url was provided.".yellow());
     } else {
+        let params = if network == "mainnet" {
+            self::params::get_mainnet_params_holder().get_for_index(batch_number as usize)
+        } else if network == "testnet" {
+            self::params::get_testnet_params_holder().get_for_index(batch_number as usize)
+        } else {
+            unreachable!();
+        };
+
+        let Some([leaf_layer_parameters_commitment, node_layer_vk_commitment]) = params else {
+            println!("Can not get verification keys commitments for batch {}. Either it's too far in the past, or update the CLI", batch_number.to_string().yellow());
+            return;
+        };
+
         println!("{}", "Fetching data from Ethereum L1 for state roots, bootloader and default Account Abstraction parameters".on_blue());
 
         let l1_data = requests::fetch_l1_data(batch_number, &network, &l1_rpc.unwrap()).await;
@@ -206,13 +225,6 @@ async fn main() {
         flattened_public_input.extend(this_block_content_hash);
         // recursion parameters, for now hardcoded
 
-        let node_layer_vk_commitment = [
-            GoldilocksField::from_u64_unchecked(0x5a3ef282b21e12fe),
-            GoldilocksField::from_u64_unchecked(0x1f4438e5bb158fc5),
-            GoldilocksField::from_u64_unchecked(0x060b160559c5158c),
-            GoldilocksField::from_u64_unchecked(0x6389d62d9fe3d080),
-        ];
-
         let mut recursion_node_verification_key_hash = [0u8; 32];
         for (dst, src) in recursion_node_verification_key_hash
             .array_chunks_mut::<8>()
@@ -222,13 +234,6 @@ async fn main() {
             dst.copy_from_slice(&le_bytes[..]);
             dst.reverse();
         }
-        
-        let leaf_layer_parameters_commitment = [
-            GoldilocksField::from_u64_unchecked(0xb4338bf5dd05f4bc),
-            GoldilocksField::from_u64_unchecked(0x2df17763b445b8e0),
-            GoldilocksField::from_u64_unchecked(0xb7b7138fdf1d981c),
-            GoldilocksField::from_u64_unchecked(0xe9792eb109ab8db7),
-        ];
 
         let mut leaf_layer_parameters_hash = [0u8; 32];
         for (dst, src) in leaf_layer_parameters_hash
