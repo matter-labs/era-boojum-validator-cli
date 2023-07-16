@@ -10,20 +10,20 @@ Learn more about the Boojum proof system in our blog post: [https://blog.matter-
 
 # Limitation
 
-This repository temporarily relies on some dependencies that are not yet public. We will open these soon, but meanwhile you can run this CLI with the binary file available in the /bin folder.
+This repository temporarily relies on some dependencies that are not yet public. We will open these soon, but meanwhile you can run this CLI with the binary file available in the /bin folder (for a given architecture).
 
 # Running the CLI
 
 You can verify that committed proofs are valid by running:
 
 ```shell
-./bin/era-boojum-validator-cli --batch <batch_number> --l1_rpc <your L1 rpc https endpoint>
+./bin/<architecture>/era-boojum-validator-cli --batch <batch_number> --l1_rpc <your L1 rpc https endpoint>
 ```
 
 Full example
 
 ```shell
-./bin/era-boojum-validator-cli --batch 109939 --network mainnet --l1-rpc https://rpc.ankr.com/eth
+./bin/<architecture>/era-boojum-validator-cli --batch 109939 --network mainnet --l1-rpc https://rpc.ankr.com/eth
 ```
 
 ## CLI Options
