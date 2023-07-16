@@ -23,7 +23,7 @@ You can verify that committed proofs are valid by running:
 Full example
 
 ```shell
-./bin/era-boojum-validator-cli --batch 98718 --network testnet --l1_rpc https://mycoolrpcproviderforgoerli.com/<my personal key>
+./bin/era-boojum-validator-cli --batch 109939 --network mainnet --l1-rpc https://rpc.ankr.com/eth
 ```
 
 ## CLI Options
@@ -57,3 +57,63 @@ at your option.
 - [Twitter for Devs](https://twitter.com/zkSyncDevs)
 - [Discord](https://join.zksync.dev)
 
+
+
+## More details
+The proving process consists of three steps:
+
+* Checking if the 'proof' is correct.
+* Verifying if it corresponds to the execution of a given circuit.
+* Confirming if the inputs are consistent with the data obtained from the blockchain.
+
+
+The example output looks like this:
+
+```
+Fetching and validating the proof itself
+Downloading proof for batch 109939 on network mainnet
+Proof type: Scheduler
+Will be evaluating Boolean constraint gate over specialized columns
+Evaluating general purpose gates
+Proof is VALID
+
+
+Fetching data from Ethereum L1 for state roots, bootloader and default Account Abstraction parameters
+Fetching batch 109938 information from zkSync Era on network mainnet
+Fetching batch 109939 information from zkSync Era on network mainnet
+Will be verifying a proof for state transition from root 0x82a329b7d25ebed88bacb07acf2f2aa802d7ef455388056b5aaa2102397ba0b7 to root 0x3bda3d0b1224289b815b8762840b30ada8c78f4037e5d4deb77c528164a55dd7
+Will be using bootloader code hash 0x010007794e73f682ad6d27e86b6f71bbee875fc26f5708d1713e7cfd476098d3 and default AA code hash 0x0100067d861e2f5717a12c3e869cfb657793b86bbb0caa05cc1421f16c5217bc
+
+
+Fetching auxilary block data
+Downloading aux data for batch 109939 on network mainnet
+
+
+Comparing public input from Ethereum with input for boojum
+Recomputed public input from current prover using L1 data is [0x00ef1fcedf42b25f, 0x0013303f11868b9a, 0x00f21282095d269b, 0x00237a23e94d0c66]
+Boojum proof's public input is [0x00ef1fcedf42b25f, 0x0013303f11868b9a, 0x00f21282095d269b, 0x00237a23e94d0c66]
+Boojum's proof is VALID
+```
+
+
+First, the CLI fetches the 'proof' from our storage, which is on Google Cloud Storage (GCS) (in the future, it will be directly on Ethereum). This proof is a `Proof` struct from the Boojum repository, which includes the configuration, public inputs, and additional data required for Fast Reed-Solomon Interactive Oracle (FRI), like oracle caps, values, and queries.
+
+
+
+Next, we check that this proof is valid and matches a specific verification key, in this case, it's the `verification_scheduler_key.json`. This key is like a fingerprint of the code of the circuit.
+
+
+This process ensures that we have a valid 'proof' of our code's execution for given inputs. Now we need to verify that these inputs match the network hashes on Ethereum.
+
+
+Next, we collect data from L1 which includes:
+
+* The hash of the previous block
+* The hash of the current block
+* The hash of the bootloader code
+* The hash of the default account code
+* And other metadata like queue hashes
+
+For now, we also get some auxiliary data (BlockAuxilaryOutput) from GCS, but in the future, when the system is fully deployed, this data will also be fetched from L1.
+
+Finally, we calculate a hash from all these inputs and compare it with the public input of the 'proof'. If they match, it means the computation has been successfully verified.
