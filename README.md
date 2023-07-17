@@ -6,7 +6,7 @@ This is an experimental command line tool to verify the proofs for zkSync Era's 
 
 The CLI fetches Boojum proofs for a given batch, and also L1 data from our current prover, so it can compare both and validate they are equivalent.
 
-Learn more about the Boojum proof system in our blog post: [https://blog.matter-labs.io/zksyncera-boojum-fb9b8bd31144](https://blog.matter-labs.io/zksyncera-boojum-fb9b8bd31144)
+Learn more about the Boojum proof system in our blog post: [https://zksync.mirror.xyz/HJ2Pj45EJkRdt5Pau-ZXwkV2ctPx8qFL19STM5jdYhc](https://zksync.mirror.xyz/HJ2Pj45EJkRdt5Pau-ZXwkV2ctPx8qFL19STM5jdYhc)
 
 # Limitations
 
