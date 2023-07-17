@@ -12,6 +12,11 @@ Learn more about the Boojum proof system in our blog post: [https://blog.matter-
 
 This repository temporarily relies on some dependencies that are not yet public. We will open these soon, but meanwhile you can run this CLI with the binary file available in the /bin folder (for a given architecture).
 
+We currently have available binaries for:
+- Mac M1/M2 (macosx-arm64)
+- Mac Intel (macosx-amd64)
+- Linux (linux-amd64)
+
 # Running the CLI
 
 You can verify that committed proofs are valid by running:
