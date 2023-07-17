@@ -1,0 +1,21 @@
+name: "Test"
+on:
+  pull_request:
+
+jobs:
+  test:
+    name: Test build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        id: setup-rust
+        with:
+          toolchain: nightly-2023-07-01 # TODO: update after https://github.com/rust-lang/rust/issues/113500 is fixed
+          rustflags: ""
+      - name: Print used Rust versions
+        run: |
+          echo "Rustc version: ${{ steps.setup-rust.outputs.rustc-version }}"
+          echo "Cargo version: ${{ steps.setup-rust.outputs.cargo-version }}"
+          echo "Rustup version: ${{ steps.setup-rust.outputs.rustup-version }}"
+      - run: cargo build
