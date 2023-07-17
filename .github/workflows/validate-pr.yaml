@@ -1,0 +1,15 @@
+name: "Test"
+on:
+  pull_request:
+
+jobs:
+  test:
+    name: Test build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+            toolchain: nightly-2023-06-30 # TODO: update after https://github.com/rust-lang/rust/issues/113500 is fixed
+      - run: cargo build
+
