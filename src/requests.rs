@@ -1,20 +1,21 @@
-
+use circuit_definitions::boojum::field::goldilocks::GoldilocksField;
+use ethers::abi::Function;
 use std::fs;
 use std::io::Cursor;
-use ethers::abi::Function;
-use boojum::field::goldilocks::GoldilocksField;
 
 pub async fn fetch_data_from_storage(
     data_type: &str,
     batch_number: u64,
     network: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-
     let expected_file_path;
     let url;
     if data_type == "proof" {
         expected_file_path = format!("./downloaded_data/proof_{}_{}.bin", network, batch_number);
-        url = format!("https://storage.googleapis.com/zksync-era-{}-proofs/proofs_fri/proof_{}.bin", network, batch_number)
+        url = format!(
+            "https://storage.googleapis.com/zksync-era-{}-proofs/proofs_fri/proof_{}.bin",
+            network, batch_number
+        )
     } else if data_type == "aux_data" {
         expected_file_path = format!("./downloaded_data/aux_{}_{}.bin", network, batch_number);
         url = format!("https://storage.googleapis.com/zksync-era-{}-proofs/scheduler_witness_jobs_fri/aux_output_witness_{}.bin", network, batch_number)
@@ -39,23 +40,36 @@ pub async fn fetch_data_from_storage(
 
         return Ok(expected_file_path);
     } else {
-        return Err(format!("Data for batch {} on network {} not found", batch_number, network).into());
+        return Err(format!(
+            "Data for batch {} on network {} not found",
+            batch_number, network
+        )
+        .into());
     }
 }
 
-
 /// Download the proof file if it exists and saves locally
-pub async fn fetch_proof_from_storage(batch_number: u64, network: &str) -> Result<String, Box<dyn std::error::Error>> {
-
-    println!("Downloading proof for batch {} on network {}", batch_number, network);
+pub async fn fetch_proof_from_storage(
+    batch_number: u64,
+    network: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    println!(
+        "Downloading proof for batch {} on network {}",
+        batch_number, network
+    );
 
     fetch_data_from_storage(&"proof", batch_number, network).await
 }
 
 /// Download the proof file if it exists and saves locally
-pub async fn fetch_aux_data_from_storage(batch_number: u64, network: &str) -> Result<AuxOutputWitnessWrapper, Box<dyn std::error::Error>> {
-
-    println!("Downloading aux data for batch {} on network {}", batch_number, network);
+pub async fn fetch_aux_data_from_storage(
+    batch_number: u64,
+    network: &str,
+) -> Result<AuxOutputWitnessWrapper, Box<dyn std::error::Error>> {
+    println!(
+        "Downloading aux data for batch {} on network {}",
+        batch_number, network
+    );
 
     let aux_path = fetch_data_from_storage(&"aux_data", batch_number, network).await;
 
@@ -76,33 +90,49 @@ pub struct BatchL1Data {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct AuxOutputWitnessWrapper(
-    pub zkevm_circuits::scheduler::block_header::BlockAuxilaryOutputWitness<GoldilocksField>,
+    pub  circuit_definitions::zkevm_circuits::scheduler::block_header::BlockAuxilaryOutputWitness<
+        GoldilocksField,
+    >,
 );
 
-pub async fn fetch_l1_data(batch_number: u64, network: &str, rpc_url: &str) -> Result<BatchL1Data, String> {
-    use ethers::types::*;
-    use ethers::prelude::*;
-    use ethers::abi::Abi;
-    use std::str::FromStr;
+pub async fn fetch_l1_data(
+    batch_number: u64,
+    network: &str,
+    rpc_url: &str,
+) -> Result<BatchL1Data, String> {
     use colored::Colorize;
+    use ethers::abi::Abi;
+    use ethers::prelude::*;
+    use ethers::types::*;
+    use std::str::FromStr;
 
     #[allow(non_snake_case)]
-    let DIAMOND_PROXY = if network.to_string() == "mainnet" { "32400084c286cf3e17e7b677ea9583e60a000324" } else { "1908e2BF4a88F91E4eF0DC72f02b8Ea36BEa2319" };
+    let DIAMOND_PROXY = if network.to_string() == "mainnet" {
+        "32400084c286cf3e17e7b677ea9583e60a000324"
+    } else {
+        "1908e2BF4a88F91E4eF0DC72f02b8Ea36BEa2319"
+    };
 
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
-    
+
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
     let function = contract_abi.functions_by_name("commitBlocks").unwrap()[0].clone();
     let previous_batch_number = batch_number - 1;
     let address = Address::from_str(DIAMOND_PROXY).unwrap();
-    
+
     let mut roots = vec![];
     let mut l1_block_number = 0;
     for b_number in [previous_batch_number, batch_number] {
+        let commit_tx = fetch_batch_commit_tx(b_number, network)
+            .await
+            .map_err(|_| format!("failed to find commit transaction for block {}", b_number))
+            .unwrap();
 
-        let commit_tx = fetch_batch_commit_tx(b_number, network).await.map_err(|_| format!("failed to find commit transaction for block {}", b_number)).unwrap();
-        
-        let tx = client.get_transaction(TxHash::from_str(&commit_tx).unwrap()).await.map_err(|_| format!("failed to find commit transaction for block {}", b_number))?.unwrap();
+        let tx = client
+            .get_transaction(TxHash::from_str(&commit_tx).unwrap())
+            .await
+            .map_err(|_| format!("failed to find commit transaction for block {}", b_number))?
+            .unwrap();
         l1_block_number = tx.block_number.unwrap().as_u64();
         let calldata = tx.input.to_vec();
 
@@ -119,14 +149,34 @@ pub async fn fetch_l1_data(batch_number: u64, network: &str, rpc_url: &str) -> R
     let (previous_enumeration_counter, previous_root) = roots[0].clone();
     let (new_enumeration_counter, new_root) = roots[1].clone();
 
-    println!("Will be verifying a proof for state transition from root {} to root {}", format!("0x{}",hex::encode(&previous_root)).yellow(), format!("0x{}",hex::encode(&new_root)).yellow());
+    println!(
+        "Will be verifying a proof for state transition from root {} to root {}",
+        format!("0x{}", hex::encode(&previous_root)).yellow(),
+        format!("0x{}", hex::encode(&new_root)).yellow()
+    );
 
     let base_contract: BaseContract = contract_abi.into();
     let contract_instance = base_contract.into_contract::<Provider<Http>>(address, client);
-    let bootloader_code_hash = contract_instance.method::<_, H256>("getL2BootloaderBytecodeHash", ()).unwrap().block(l1_block_number).call().await.unwrap();
-    let default_aa_code_hash = contract_instance.method::<_, H256>("getL2DefaultAccountBytecodeHash", ()).unwrap().block(l1_block_number).call().await.unwrap();
+    let bootloader_code_hash = contract_instance
+        .method::<_, H256>("getL2BootloaderBytecodeHash", ())
+        .unwrap()
+        .block(l1_block_number)
+        .call()
+        .await
+        .unwrap();
+    let default_aa_code_hash = contract_instance
+        .method::<_, H256>("getL2DefaultAccountBytecodeHash", ())
+        .unwrap()
+        .block(l1_block_number)
+        .call()
+        .await
+        .unwrap();
 
-    println!("Will be using bootloader code hash {} and default AA code hash {}", format!("0x{}",hex::encode(bootloader_code_hash.as_bytes())).yellow(), format!("0x{}", hex::encode(default_aa_code_hash.as_bytes())).yellow());
+    println!(
+        "Will be using bootloader code hash {} and default AA code hash {}",
+        format!("0x{}", hex::encode(bootloader_code_hash.as_bytes())).yellow(),
+        format!("0x{}", hex::encode(default_aa_code_hash.as_bytes())).yellow()
+    );
     println!("\n");
     let result = BatchL1Data {
         previous_enumeration_counter,
@@ -140,7 +190,6 @@ pub async fn fetch_l1_data(batch_number: u64, network: &str, rpc_url: &str) -> R
     Ok(result)
 }
 
-
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct JSONL2RPCResponse {
     result: L1BatchJson,
@@ -153,38 +202,55 @@ pub struct L1BatchJson {
 }
 
 // Fetches given batch information from Era RPC
-pub async fn fetch_batch_commit_tx(batch_number: u64, network: &str) -> Result<String, Box<dyn std::error::Error>> {
-
-    println!("Fetching batch {} information from zkSync Era on network {}", batch_number, network);
+pub async fn fetch_batch_commit_tx(
+    batch_number: u64,
+    network: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    println!(
+        "Fetching batch {} information from zkSync Era on network {}",
+        batch_number, network
+    );
 
     let domain;
-    if network== "testnet" {
+    if network == "testnet" {
         domain = "https://testnet.era.zksync.dev"
-    } else  {
+    } else {
         domain = "https://mainnet.era.zksync.io"
     }
     let client = reqwest::Client::new();
 
-    let response = client.post(domain)
-    .header("Content-Type", "application/json")
-    .body(format!(r#"{{
+    let response = client
+        .post(domain)
+        .header("Content-Type", "application/json")
+        .body(format!(
+            r#"{{
             "jsonrpc": "2.0",
             "method": "zks_getL1BatchDetails",
             "params": [{}, false],
             "id": "1"
-        }}"#, batch_number)).send()
+        }}"#,
+            batch_number
+        ))
+        .send()
         .await?;
 
     if response.status().is_success() {
         let json = response.json::<JSONL2RPCResponse>().await?;
         return Ok(json.result.commitTxHash);
     } else {
-        return Err(format!("Failed to fetch information from zkSync Era RPC for batch {} on network {}", batch_number, network).into());
+        return Err(format!(
+            "Failed to fetch information from zkSync Era RPC for batch {} on network {}",
+            batch_number, network
+        )
+        .into());
     }
 }
 
-
-fn find_state_data_from_log(batch_number: u64, function: &Function, calldata: &[u8]) -> Option<(u64, Vec<u8>)> {
+fn find_state_data_from_log(
+    batch_number: u64,
+    function: &Function,
+    calldata: &[u8],
+) -> Option<(u64, Vec<u8>)> {
     use ethers::abi;
 
     let mut parsed_input = function.decode_input(&calldata[4..]).unwrap();
@@ -226,7 +292,7 @@ fn find_state_data_from_log(batch_number: u64, function: &Function, calldata: &[
                 panic!()
             };
             let new_enumeration_index = new_enumeration_index.0[0];
-    
+
             let abi::Token::FixedBytes(state_root) = inner[3].clone() else  {
                 panic!()
             };

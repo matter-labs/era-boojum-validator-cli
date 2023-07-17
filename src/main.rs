@@ -1,19 +1,18 @@
 #![feature(generic_const_exprs)]
 #![feature(array_chunks)]
 
-use boojum::field::U64Representable;
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
 use clap::Parser;
 use colored::Colorize;
 use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
-mod requests;
 mod params;
+mod requests;
 
 pub mod block_header;
 
-use boojum::{
+use circuit_definitions::boojum::{
     cs::implementations::{
         pow::NoPow, transcript::GoldilocksPoisedon2Transcript, verifier::VerificationKey,
     },
@@ -41,7 +40,7 @@ struct Cli {
     network: String,
     #[arg(long)]
     // RPC endpoint to use to fetch L1 information
-    l1_rpc: Option<String>
+    l1_rpc: Option<String>,
 }
 
 /// Reads proof (in FriProofWrapper format) from a given bin file.
@@ -92,20 +91,24 @@ async fn main() {
     let l1_rpc = opt.l1_rpc;
 
     if network != "mainnet" && network != "testnet" {
-        println!("Please use network name `{}` or `{}`", "mainnet".yellow(), "testnet".yellow());
+        println!(
+            "Please use network name `{}` or `{}`",
+            "mainnet".yellow(),
+            "testnet".yellow()
+        );
         return;
     }
 
-    println!("{}","Fetching and validating the proof itself".on_blue());
+    println!("{}", "Fetching and validating the proof itself".on_blue());
 
     let proof_response = requests::fetch_proof_from_storage(batch_number, &network).await;
 
     if let Err(_err) = proof_response {
         println!("{}", _err);
-        return
+        return;
     }
     let proof_path = proof_response.unwrap();
-    
+
     let valid_public_inputs = verify_scheduler_proof(&proof_path);
     if valid_public_inputs.is_err() {
         println!("Proof is {}", "INVALID".red());
@@ -116,7 +119,11 @@ async fn main() {
     println!("\n");
 
     if l1_rpc.is_none() {
-        println!("{}", "Skipping building batch information from Ethereum as no RPC url was provided.".yellow());
+        println!(
+            "{}",
+            "Skipping building batch information from Ethereum as no RPC url was provided."
+                .yellow()
+        );
     } else {
         let params = if network == "mainnet" {
             self::params::get_mainnet_params_holder().get_for_index(batch_number as usize)
@@ -137,14 +144,14 @@ async fn main() {
         if l1_data.is_err() {
             if let Err(_err) = l1_data {
                 println!("{}", _err);
-                return
+                return;
             }
             println!("Failed to get data from L1");
             return;
         }
-    
+
         let l1_data = l1_data.unwrap();
-    
+
         println!("{}", "Fetching auxilary block data".on_blue());
         let aux_data = requests::fetch_aux_data_from_storage(batch_number, &network).await;
         if aux_data.is_err() {
@@ -174,9 +181,11 @@ async fn main() {
                     enumeration_counter: 0,
                     state_root: [0u8; 32],
                 },
-            ]
+            ],
         };
-        let previous_passthrough_data_hash = to_fixed_bytes(Keccak256::digest(&previous_passthrough_data.into_flattened_bytes()).as_slice());
+        let previous_passthrough_data_hash = to_fixed_bytes(
+            Keccak256::digest(&previous_passthrough_data.into_flattened_bytes()).as_slice(),
+        );
 
         let previous_block_content_hash = BlockContentHeader::formal_block_hash_from_partial_hashes(
             previous_passthrough_data_hash,
@@ -195,7 +204,7 @@ async fn main() {
                     enumeration_counter: 0,
                     state_root: [0u8; 32],
                 },
-            ]
+            ],
         };
 
         let new_meta_params = BlockMetaParameters {
@@ -248,10 +257,12 @@ async fn main() {
         flattened_public_input.extend(recursion_node_verification_key_hash);
         flattened_public_input.extend(leaf_layer_parameters_hash);
 
-        let input_keccak_hash = to_fixed_bytes(Keccak256::digest(&flattened_public_input).as_slice());
+        let input_keccak_hash =
+            to_fixed_bytes(Keccak256::digest(&flattened_public_input).as_slice());
         let mut public_inputs = vec![];
-        use boojum::field::PrimeField;
-        use zkevm_circuits::scheduler::NUM_SCHEDULER_PUBLIC_INPUTS;
+        use circuit_definitions::boojum::field::PrimeField;
+        use circuit_definitions::boojum::field::U64Representable;
+        use circuit_definitions::zkevm_circuits::scheduler::NUM_SCHEDULER_PUBLIC_INPUTS;
         let take_by = GoldilocksField::CAPACITY_BITS / 8;
 
         for chunk in input_keccak_hash
@@ -263,12 +274,21 @@ async fn main() {
             let as_field_element = GoldilocksField::from_u64_unchecked(u64::from_be_bytes(buffer));
             public_inputs.push(as_field_element);
         }
-   
+
         let valid_public_inputs = valid_public_inputs.unwrap();
 
-        println!("{} ", "Comparing public input from Ethereum with input for boojum".on_blue());
-        println!("Recomputed public input from current prover using L1 data is {}", format!("{:?}", public_inputs).bright_blue());
-        println!("Boojum proof's public input is {}", format!("{:?}", valid_public_inputs).green());
+        println!(
+            "{} ",
+            "Comparing public input from Ethereum with input for boojum".on_blue()
+        );
+        println!(
+            "Recomputed public input from current prover using L1 data is {}",
+            format!("{:?}", public_inputs).bright_blue()
+        );
+        println!(
+            "Boojum proof's public input is {}",
+            format!("{:?}", valid_public_inputs).green()
+        );
 
         if public_inputs == valid_public_inputs {
             println!("Boojum's proof is {}", "VALID".green());
@@ -276,10 +296,9 @@ async fn main() {
             println!("Boojum's proof is {}", "INVALID".red());
         }
         return;
-    } 
-        
+    }
+
     println!("\n");
-    
 }
 
 #[cfg(test)]

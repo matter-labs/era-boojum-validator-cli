@@ -354,38 +354,6 @@ dependencies = [
 [[package]]
 name = "boojum"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/boojum.git?branch=main#23837ca016c676edce479e42f5c75e74c9169c19"
-dependencies = [
- "arrayvec",
- "bincode",
- "blake2",
- "const_format",
- "convert_case",
- "crossbeam",
- "crypto-bigint 0.5.2",
- "cs_derive 0.1.0 (git+https://github.com/matter-labs/boojum.git?branch=main)",
- "derivative",
- "ethereum-types 0.12.1",
- "firestorm",
- "itertools",
- "lazy_static",
- "num-modular",
- "num_cpus",
- "packed_simd_2",
- "pairing_ce",
- "rand 0.8.5",
- "rayon",
- "serde",
- "sha2 0.10.6",
- "sha3",
- "simd_aligned",
- "smallvec",
- "unroll",
-]
-
-[[package]]
-name = "boojum"
-version = "0.1.0"
 source = "git+https://github.com/matter-labs/era-boojum.git?branch=main#0fa485b91df0fadbf10d05a0b3de4e55f3d61d99"
 dependencies = [
  "arrayvec",
@@ -395,7 +363,7 @@ dependencies = [
  "convert_case",
  "crossbeam",
  "crypto-bigint 0.5.2",
- "cs_derive 0.1.0 (git+https://github.com/matter-labs/era-boojum.git?branch=main)",
+ "cs_derive",
  "derivative",
  "ethereum-types 0.12.1",
  "firestorm",
@@ -545,7 +513,7 @@ dependencies = [
 [[package]]
 name = "circuit_definitions"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/zkevm_test_harness.git?branch=v1.4.0#328038b68b50d184114ba1a0daad2b54b4eb931b"
+source = "git+https://github.com/matter-labs/era-zkevm_test_harness.git?branch=v1.4.0#53c335b0e9c44ffd5d5a983a20d7177a92a04b8a"
 dependencies = [
  "crossbeam",
  "derivative",
@@ -852,17 +820,6 @@ dependencies = [
 [[package]]
 name = "cs_derive"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/boojum.git?branch=main#23837ca016c676edce479e42f5c75e74c9169c19"
-dependencies = [
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "cs_derive"
-version = "0.1.0"
 source = "git+https://github.com/matter-labs/era-boojum.git?branch=main#0fa485b91df0fadbf10d05a0b3de4e55f3d61d99"
 dependencies = [
  "proc-macro-error",
@@ -1033,7 +990,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
- "boojum 0.1.0 (git+https://github.com/matter-labs/era-boojum.git?branch=main)",
  "circuit_definitions",
  "clap",
  "colored",
@@ -1044,7 +1000,6 @@ dependencies = [
  "serde_json",
  "sha3",
  "tokio",
- "zkevm_circuits",
 ]
 
 [[package]]
@@ -4320,7 +4275,7 @@ dependencies = [
 [[package]]
 name = "zk_evm"
 version = "1.4.0"
-source = "git+https://github.com/matter-labs/zk_evm.git?branch=v1.4.0#e1888ea63b7a6ff69c91ed0066c53859e440d380"
+source = "git+https://github.com/matter-labs/era-zk_evm.git?branch=v1.4.0#cf30e8aa0205471088ab0bd627eeddb861cffbc7"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -4335,7 +4290,7 @@ dependencies = [
 [[package]]
 name = "zk_evm_abstractions"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/zk_evm_abstractions.git#839721a4ae2093c5c0aa8ffd49758f32ecd172ed"
+source = "git+https://github.com/matter-labs/era-zk_evm_abstractions.git#973a1f661c045e0e8b9a287505f353659279b3b3"
 dependencies = [
  "anyhow",
  "serde",
@@ -4346,12 +4301,12 @@ dependencies = [
 [[package]]
 name = "zkevm_circuits"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/zkevm_circuits.git?branch=main#b3a198bfa374cca651fd38c98dc216c9c8969a7e"
+source = "git+https://github.com/matter-labs/era-zkevm_circuits.git?branch=main#bf846cb17eff10524ea2c8e6d792e31d4985b327"
 dependencies = [
  "arrayvec",
  "bincode",
- "boojum 0.1.0 (git+https://github.com/matter-labs/boojum.git?branch=main)",
- "cs_derive 0.1.0 (git+https://github.com/matter-labs/boojum.git?branch=main)",
+ "boojum",
+ "cs_derive",
  "derivative",
  "ethereum-types 0.12.1",
  "hex",
@@ -4367,7 +4322,7 @@ dependencies = [
 [[package]]
 name = "zkevm_opcode_defs"
 version = "1.3.2"
-source = "git+https://github.com/matter-labs/zkevm_opcode_defs.git?branch=v1.3.2#261b48e9369b356bbd65023d20227b45b47915a2"
+source = "git+https://github.com/matter-labs/era-zkevm_opcode_defs.git?branch=v1.3.2#2f69c6975a272e8c31d2d82c136a4ea81df25115"
 dependencies = [
  "bitflags 2.3.3",
  "blake2",

@@ -2,7 +2,7 @@ use sha3::{Digest, Keccak256};
 
 pub struct PerShardState {
     pub enumeration_counter: u64,
-    pub state_root: [u8; 32]
+    pub state_root: [u8; 32],
 }
 
 pub const NUM_SHARDS: usize = 2;
@@ -78,7 +78,6 @@ pub struct BlockHeader {
     pub new_block_content_hash: [u8; 32],
 }
 
-
 pub struct BlockContentHeader {
     pub block_data: BlockPassthroughData,
     pub block_meta: BlockMetaParameters,
@@ -93,12 +92,7 @@ pub fn to_fixed_bytes(ins: &[u8]) -> [u8; 32] {
 }
 
 impl BlockContentHeader {
-    pub fn into_formal_block_hash(
-        self,
-    ) -> (
-        [u8; 32],
-        ([u8; 32], [u8; 32], [u8; 32]),
-    ) {
+    pub fn into_formal_block_hash(self) -> ([u8; 32], ([u8; 32], [u8; 32], [u8; 32])) {
         // everything is BE
         let block_data = self.block_data.into_flattened_bytes();
         let block_meta = self.block_meta.into_flattened_bytes();
@@ -132,7 +126,7 @@ impl BlockContentHeader {
         concatenated.extend(block_meta_hash);
         concatenated.extend(auxilary_output_hash);
 
-        let block_header_hash =  to_fixed_bytes(Keccak256::digest(&concatenated).as_slice());
+        let block_header_hash = to_fixed_bytes(Keccak256::digest(&concatenated).as_slice());
 
         block_header_hash
     }
