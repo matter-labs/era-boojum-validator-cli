@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-boojum = { git = "https://github.com/matter-labs/boojum.git", branch="main"}
+boojum = { git = "https://github.com/matter-labs/era-boojum.git", branch="main"}
 zkevm_circuits = {git = "https://github.com/matter-labs/zkevm_circuits.git", branch="main"}
 circuit_definitions = {git = "https://github.com/matter-labs/zkevm_test_harness.git", branch="v1.4.0"}
 

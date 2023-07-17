@@ -2,7 +2,7 @@
 
 [![Logo](eraLogo.png)](https://zksync.io/)
 # 
-This is an experimental command line tool to verify the proofs for zkSync Era's updated proof system, Boojum.
+This is an experimental command line tool to verify the proofs for zkSync Era's updated proof system, Boojum [https://github.com/matter-labs/era-boojum](https://github.com/matter-labs/era-boojum).
 
 The CLI fetches Boojum proofs for a given batch, and also L1 data from our current prover, so it can compare both and validate they are equivalent.
 

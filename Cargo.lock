@@ -363,7 +363,39 @@ dependencies = [
  "convert_case",
  "crossbeam",
  "crypto-bigint 0.5.2",
- "cs_derive",
+ "cs_derive 0.1.0 (git+https://github.com/matter-labs/boojum.git?branch=main)",
+ "derivative",
+ "ethereum-types 0.12.1",
+ "firestorm",
+ "itertools",
+ "lazy_static",
+ "num-modular",
+ "num_cpus",
+ "packed_simd_2",
+ "pairing_ce",
+ "rand 0.8.5",
+ "rayon",
+ "serde",
+ "sha2 0.10.6",
+ "sha3",
+ "simd_aligned",
+ "smallvec",
+ "unroll",
+]
+
+[[package]]
+name = "boojum"
+version = "0.1.0"
+source = "git+https://github.com/matter-labs/era-boojum.git?branch=main#0fa485b91df0fadbf10d05a0b3de4e55f3d61d99"
+dependencies = [
+ "arrayvec",
+ "bincode",
+ "blake2",
+ "const_format",
+ "convert_case",
+ "crossbeam",
+ "crypto-bigint 0.5.2",
+ "cs_derive 0.1.0 (git+https://github.com/matter-labs/era-boojum.git?branch=main)",
  "derivative",
  "ethereum-types 0.12.1",
  "firestorm",
@@ -829,6 +861,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cs_derive"
+version = "0.1.0"
+source = "git+https://github.com/matter-labs/era-boojum.git?branch=main#0fa485b91df0fadbf10d05a0b3de4e55f3d61d99"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "ctr"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -990,7 +1033,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
- "boojum",
+ "boojum 0.1.0 (git+https://github.com/matter-labs/era-boojum.git?branch=main)",
  "circuit_definitions",
  "clap",
  "colored",
@@ -2750,18 +2793,18 @@ checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.65"
+version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92de25114670a878b1261c79c9f8f729fb97e95bac93f6312f583c60dd6a1dfe"
+checksum = "18fb31db3f9bddb2ea821cde30a9f70117e3f119938b5ee630b7403aa6e2ead9"
 dependencies = [
  "unicode-ident",
 ]
 
 [[package]]
 name = "quote"
-version = "1.0.30"
+version = "1.0.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5907a1b7c277254a8b15170f6e7c97cfa60ee7872a3217663bb81151e48184bb"
+checksum = "5fe8a65d69dd0808184ebb5f836ab526bb259db23c657efa38711b1072ee47f0"
 dependencies = [
  "proc-macro2",
 ]
@@ -4307,8 +4350,8 @@ source = "git+https://github.com/matter-labs/zkevm_circuits.git?branch=main#b3a1
 dependencies = [
  "arrayvec",
  "bincode",
- "boojum",
- "cs_derive",
+ "boojum 0.1.0 (git+https://github.com/matter-labs/boojum.git?branch=main)",
+ "cs_derive 0.1.0 (git+https://github.com/matter-labs/boojum.git?branch=main)",
  "derivative",
  "ethereum-types 0.12.1",
  "hex",
