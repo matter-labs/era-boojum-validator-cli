@@ -43,16 +43,34 @@ pub fn get_mainnet_params_holder() -> CommitsHolder {
                     GoldilocksField::from_u64_unchecked(0x060b160559c5158c),
                     GoldilocksField::from_u64_unchecked(0x6389d62d9fe3d080),
                 ],
-            ],
-        )],
-        current: (
-            109816,
+            ]),
+            (
+            109816..115165,
             [
                 [
                     GoldilocksField::from_u64_unchecked(0x4f07753d1ab098f9),
                     GoldilocksField::from_u64_unchecked(0xb5d6ba747d3b4716),
                     GoldilocksField::from_u64_unchecked(0x4721dd0dc2ee4d9e),
                     GoldilocksField::from_u64_unchecked(0xe6c8227e3d87b6e6),
+                ],
+                [
+                    GoldilocksField::from_u64_unchecked(0x5a3ef282b21e12fe),
+                    GoldilocksField::from_u64_unchecked(0x1f4438e5bb158fc5),
+                    GoldilocksField::from_u64_unchecked(0x060b160559c5158c),
+                    GoldilocksField::from_u64_unchecked(0x6389d62d9fe3d080),
+                ],
+            ])
+        ],
+
+
+        current: (
+            115165,
+            [
+                [
+                    GoldilocksField::from_u64_unchecked(0x06babae433cab419),
+                    GoldilocksField::from_u64_unchecked(0x798a8e063042acb9),
+                    GoldilocksField::from_u64_unchecked(0xaa74e3e826a89da6),
+                    GoldilocksField::from_u64_unchecked(0x496869d04d28460e),
                 ],
                 [
                     GoldilocksField::from_u64_unchecked(0x5a3ef282b21e12fe),
