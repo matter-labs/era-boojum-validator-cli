@@ -1,4 +1,3 @@
-#![feature(generic_const_exprs)]
 #![feature(array_chunks)]
 
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
@@ -109,6 +108,7 @@ async fn main() {
     }
     let proof_path = proof_response.unwrap();
 
+    // First, we verify that the proof itself is valid.
     let valid_public_inputs = verify_scheduler_proof(&proof_path);
     if valid_public_inputs.is_err() {
         println!("Proof is {}", "INVALID".red());
@@ -118,6 +118,9 @@ async fn main() {
     }
     println!("\n");
 
+    // Then we verify the public inputs (that contain the circuit code, prev and next root hash etc)
+    // To make sure that the proof is matching a correct computation.
+
     if l1_rpc.is_none() {
         println!(
             "{}",
@@ -125,6 +128,8 @@ async fn main() {
                 .yellow()
         );
     } else {
+        // Loads verification keys.
+        // As our circuits change, the verification keys also change - so depending on the batch number, they might have different values.
         let params = if network == "mainnet" {
             self::params::get_mainnet_params_holder().get_for_index(batch_number as usize)
         } else if network == "testnet" {
