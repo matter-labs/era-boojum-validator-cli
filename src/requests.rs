@@ -3,25 +3,30 @@ use ethers::abi::Function;
 use std::fs;
 use std::io::Cursor;
 
+pub enum StorageDataType {
+    Proof,
+    AuxData,
+}
+
+/// Fetches data from Google cloud and caches it locally.
 pub async fn fetch_data_from_storage(
-    data_type: &str,
+    data_type: StorageDataType,
     batch_number: u64,
     network: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let expected_file_path;
-    let url;
-    if data_type == "proof" {
-        expected_file_path = format!("./downloaded_data/proof_{}_{}.bin", network, batch_number);
-        url = format!(
-            "https://storage.googleapis.com/zksync-era-{}-proofs/proofs_fri/proof_{}.bin",
-            network, batch_number
+    let (expected_file_path, url) = match data_type {
+        StorageDataType::Proof => (
+            format!("./downloaded_data/proof_{}_{}.bin", network, batch_number),
+            format!(
+                "https://storage.googleapis.com/zksync-era-{}-proofs/proofs_fri/proof_{}.bin",
+                network, batch_number
+            )
+        ),
+        StorageDataType::AuxData => (
+            format!("./downloaded_data/aux_{}_{}.bin", network, batch_number),
+            format!("https://storage.googleapis.com/zksync-era-{}-proofs/scheduler_witness_jobs_fri/aux_output_witness_{}.bin", network, batch_number)
         )
-    } else if data_type == "aux_data" {
-        expected_file_path = format!("./downloaded_data/aux_{}_{}.bin", network, batch_number);
-        url = format!("https://storage.googleapis.com/zksync-era-{}-proofs/scheduler_witness_jobs_fri/aux_output_witness_{}.bin", network, batch_number)
-    } else {
-        return Err("Invalid type to fetch".into());
-    }
+    };
 
     let path = std::path::Path::new(&expected_file_path);
     if path.exists() {
@@ -58,7 +63,7 @@ pub async fn fetch_proof_from_storage(
         batch_number, network
     );
 
-    fetch_data_from_storage(&"proof", batch_number, network).await
+    fetch_data_from_storage(StorageDataType::Proof, batch_number, network).await
 }
 
 /// Download the proof file if it exists and saves locally
@@ -71,7 +76,7 @@ pub async fn fetch_aux_data_from_storage(
         batch_number, network
     );
 
-    let aux_path = fetch_data_from_storage(&"aux_data", batch_number, network).await;
+    let aux_path = fetch_data_from_storage(StorageDataType::AuxData, batch_number, network).await;
 
     let bytes = std::fs::read(aux_path.unwrap())?;
 
@@ -82,9 +87,13 @@ pub async fn fetch_aux_data_from_storage(
 pub struct BatchL1Data {
     pub previous_enumeration_counter: u64,
     pub previous_root: Vec<u8>,
+    // Enumeration counter (used for L2 -> L1 communication).
     pub new_enumeration_counter: u64,
+    // Storage root.
     pub new_root: Vec<u8>,
+    // Hash of the account abstraction code.
     pub default_aa_hash: [u8; 32],
+    // Hash of the bootloader.yul code.
     pub bootloader_hash: [u8; 32],
 }
 
@@ -103,7 +112,6 @@ pub async fn fetch_l1_data(
     use colored::Colorize;
     use ethers::abi::Abi;
     use ethers::prelude::*;
-    use ethers::types::*;
     use std::str::FromStr;
 
     #[allow(non_snake_case)]

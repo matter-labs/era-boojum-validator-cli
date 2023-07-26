@@ -1,4 +1,3 @@
-#![feature(generic_const_exprs)]
 #![feature(array_chunks)]
 
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
@@ -82,6 +81,164 @@ pub fn verify_scheduler_proof(proof_path: &str) -> anyhow::Result<Vec<Goldilocks
     }
 }
 
+/// Computes the public inputs for a given batch in a given network.
+/// Public inputs require us to fetch multiple data from the l1 (like state hash etc).
+pub async fn compute_public_inputs(
+    network: String,
+    batch_number: u64,
+    l1_rpc: Option<String>,
+) -> anyhow::Result<Vec<GoldilocksField>> {
+    // Loads verification keys.
+    // As our circuits change, the verification keys also change - so depending on the batch number, they might have different values.
+    let params = if network == "mainnet" {
+        self::params::get_mainnet_params_holder().get_for_index(batch_number as usize)
+    } else if network == "testnet" {
+        self::params::get_testnet_params_holder().get_for_index(batch_number as usize)
+    } else {
+        unreachable!();
+    };
+
+    let Some([leaf_layer_parameters_commitment, node_layer_vk_commitment]) = params else {
+            anyhow::bail!(format!("Can not get verification keys commitments for batch {}. Either it's too far in the past, or update the CLI", batch_number.to_string().yellow()));
+        };
+
+    println!("{}", "Fetching data from Ethereum L1 for state roots, bootloader and default Account Abstraction parameters".on_blue());
+
+    let l1_data = requests::fetch_l1_data(batch_number, &network, &l1_rpc.unwrap()).await;
+    if l1_data.is_err() {
+        if let Err(_err) = l1_data {
+            anyhow::bail!(format!("Failed to get data from L1: {}", _err));
+        }
+        anyhow::bail!("Failed to get data from L1");
+    }
+
+    let l1_data = l1_data.unwrap();
+
+    println!("{}", "Fetching auxilary block data".on_blue());
+    let aux_data = requests::fetch_aux_data_from_storage(batch_number, &network).await;
+    if aux_data.is_err() {
+        anyhow::bail!("Failed to get auxiliary data");
+    }
+    println!("\n");
+
+    // After fetching the data, we recreate the public input hash (for which we need information from current and previous block).
+
+    let aux_data = aux_data.unwrap();
+
+    // while we do not prove all the blocks we use placeholders for non-state related parts
+    // of the previous block
+    let previous_block_meta_hash = [0u8; 32];
+    let previous_block_aux_hash = [0u8; 32];
+
+    use self::block_header::*;
+    use sha3::{Digest, Keccak256};
+
+    let previous_passthrough_data = BlockPassthroughData {
+        per_shard_states: [
+            PerShardState {
+                enumeration_counter: l1_data.previous_enumeration_counter,
+                state_root: l1_data.previous_root.try_into().unwrap(),
+            },
+            // porter shard is not used
+            PerShardState {
+                enumeration_counter: 0,
+                state_root: [0u8; 32],
+            },
+        ],
+    };
+    let previous_passthrough_data_hash = to_fixed_bytes(
+        Keccak256::digest(&previous_passthrough_data.into_flattened_bytes()).as_slice(),
+    );
+
+    let previous_block_content_hash = BlockContentHeader::formal_block_hash_from_partial_hashes(
+        previous_passthrough_data_hash,
+        previous_block_meta_hash,
+        previous_block_aux_hash,
+    );
+
+    let new_passthrough_data = BlockPassthroughData {
+        per_shard_states: [
+            PerShardState {
+                enumeration_counter: l1_data.new_enumeration_counter,
+                state_root: l1_data.new_root.try_into().unwrap(),
+            },
+            // porter shard is not used
+            PerShardState {
+                enumeration_counter: 0,
+                state_root: [0u8; 32],
+            },
+        ],
+    };
+
+    let new_meta_params = BlockMetaParameters {
+        zkporter_is_available: false,
+        bootloader_code_hash: l1_data.bootloader_hash,
+        default_aa_code_hash: l1_data.default_aa_hash,
+    };
+
+    let aux_data = aux_data.0;
+
+    let new_aux_params = BlockAuxilaryOutput {
+        l1_messages_linear_hash: aux_data.l1_messages_linear_hash,
+        rollup_state_diff_for_compression: aux_data.rollup_state_diff_for_compression,
+        bootloader_heap_initial_content: aux_data.bootloader_heap_initial_content,
+        events_queue_state: aux_data.events_queue_state,
+    };
+
+    let new_header = BlockContentHeader {
+        block_data: new_passthrough_data,
+        block_meta: new_meta_params,
+        auxilary_output: new_aux_params,
+    };
+    let this_block_content_hash = new_header.into_formal_block_hash().0;
+
+    let mut flattened_public_input = vec![];
+    flattened_public_input.extend(previous_block_content_hash);
+    flattened_public_input.extend(this_block_content_hash);
+    // recursion parameters, for now hardcoded
+
+    let mut recursion_node_verification_key_hash = [0u8; 32];
+    for (dst, src) in recursion_node_verification_key_hash
+        .array_chunks_mut::<8>()
+        .zip(node_layer_vk_commitment.iter())
+    {
+        let le_bytes = src.to_reduced_u64().to_le_bytes();
+        dst.copy_from_slice(&le_bytes[..]);
+        dst.reverse();
+    }
+
+    let mut leaf_layer_parameters_hash = [0u8; 32];
+    for (dst, src) in leaf_layer_parameters_hash
+        .array_chunks_mut::<8>()
+        .zip(leaf_layer_parameters_commitment.iter())
+    {
+        let le_bytes = src.to_reduced_u64().to_le_bytes();
+        dst.copy_from_slice(&le_bytes[..]);
+        dst.reverse();
+    }
+
+    flattened_public_input.extend(recursion_node_verification_key_hash);
+    flattened_public_input.extend(leaf_layer_parameters_hash);
+
+    let input_keccak_hash = to_fixed_bytes(Keccak256::digest(&flattened_public_input).as_slice());
+    let mut public_inputs = vec![];
+    use circuit_definitions::boojum::field::PrimeField;
+    use circuit_definitions::boojum::field::U64Representable;
+    use circuit_definitions::zkevm_circuits::scheduler::NUM_SCHEDULER_PUBLIC_INPUTS;
+    let take_by = GoldilocksField::CAPACITY_BITS / 8;
+
+    for chunk in input_keccak_hash
+        .chunks_exact(take_by)
+        .take(NUM_SCHEDULER_PUBLIC_INPUTS)
+    {
+        let mut buffer = [0u8; 8];
+        buffer[1..].copy_from_slice(chunk);
+        let as_field_element = GoldilocksField::from_u64_unchecked(u64::from_be_bytes(buffer));
+        public_inputs.push(as_field_element);
+    }
+    Ok(public_inputs)
+}
+
 #[tokio::main]
 async fn main() {
     let opt = Cli::parse();
@@ -109,6 +266,7 @@ async fn main() {
     }
     let proof_path = proof_response.unwrap();
 
+    // First, we verify that the proof itself is valid.
     let valid_public_inputs = verify_scheduler_proof(&proof_path);
     if valid_public_inputs.is_err() {
         println!("Proof is {}", "INVALID".red());
@@ -125,155 +283,12 @@ async fn main() {
                 .yellow()
         );
     } else {
-        let params = if network == "mainnet" {
-            self::params::get_mainnet_params_holder().get_for_index(batch_number as usize)
-        } else if network == "testnet" {
-            self::params::get_testnet_params_holder().get_for_index(batch_number as usize)
-        } else {
-            unreachable!();
-        };
+        // Then we verify the public inputs (that contain the circuit code, prev and next root hash etc)
+        // To make sure that the proof is matching a correct computation.
 
-        let Some([leaf_layer_parameters_commitment, node_layer_vk_commitment]) = params else {
-            println!("Can not get verification keys commitments for batch {}. Either it's too far in the past, or update the CLI", batch_number.to_string().yellow());
-            return;
-        };
-
-        println!("{}", "Fetching data from Ethereum L1 for state roots, bootloader and default Account Abstraction parameters".on_blue());
-
-        let l1_data = requests::fetch_l1_data(batch_number, &network, &l1_rpc.unwrap()).await;
-        if l1_data.is_err() {
-            if let Err(_err) = l1_data {
-                println!("{}", _err);
-                return;
-            }
-            println!("Failed to get data from L1");
-            return;
-        }
-
-        let l1_data = l1_data.unwrap();
-
-        println!("{}", "Fetching auxilary block data".on_blue());
-        let aux_data = requests::fetch_aux_data_from_storage(batch_number, &network).await;
-        if aux_data.is_err() {
-            println!("Failed to get auxiliary data");
-            return;
-        }
-        println!("\n");
-
-        let aux_data = aux_data.unwrap();
-
-        // while we do not prove all the blocks we use placeholders for non-state related parts
-        // of the previous block
-        let previous_block_meta_hash = [0u8; 32];
-        let previous_block_aux_hash = [0u8; 32];
-
-        use self::block_header::*;
-        use sha3::{Digest, Keccak256};
-
-        let previous_passthrough_data = BlockPassthroughData {
-            per_shard_states: [
-                PerShardState {
-                    enumeration_counter: l1_data.previous_enumeration_counter,
-                    state_root: l1_data.previous_root.try_into().unwrap(),
-                },
-                // porter shard is not used
-                PerShardState {
-                    enumeration_counter: 0,
-                    state_root: [0u8; 32],
-                },
-            ],
-        };
-        let previous_passthrough_data_hash = to_fixed_bytes(
-            Keccak256::digest(&previous_passthrough_data.into_flattened_bytes()).as_slice(),
-        );
-
-        let previous_block_content_hash = BlockContentHeader::formal_block_hash_from_partial_hashes(
-            previous_passthrough_data_hash,
-            previous_block_meta_hash,
-            previous_block_aux_hash,
-        );
-
-        let new_passthrough_data = BlockPassthroughData {
-            per_shard_states: [
-                PerShardState {
-                    enumeration_counter: l1_data.new_enumeration_counter,
-                    state_root: l1_data.new_root.try_into().unwrap(),
-                },
-                // porter shard is not used
-                PerShardState {
-                    enumeration_counter: 0,
-                    state_root: [0u8; 32],
-                },
-            ],
-        };
-
-        let new_meta_params = BlockMetaParameters {
-            zkporter_is_available: false,
-            bootloader_code_hash: l1_data.bootloader_hash,
-            default_aa_code_hash: l1_data.default_aa_hash,
-        };
-
-        let aux_data = aux_data.0;
-
-        let new_aux_params = BlockAuxilaryOutput {
-            l1_messages_linear_hash: aux_data.l1_messages_linear_hash,
-            rollup_state_diff_for_compression: aux_data.rollup_state_diff_for_compression,
-            bootloader_heap_initial_content: aux_data.bootloader_heap_initial_content,
-            events_queue_state: aux_data.events_queue_state,
-        };
-
-        let new_header = BlockContentHeader {
-            block_data: new_passthrough_data,
-            block_meta: new_meta_params,
-            auxilary_output: new_aux_params,
-        };
-        let this_block_content_hash = new_header.into_formal_block_hash().0;
-
-        let mut flattened_public_input = vec![];
-        flattened_public_input.extend(previous_block_content_hash);
-        flattened_public_input.extend(this_block_content_hash);
-        // recursion parameters, for now hardcoded
-
-        let mut recursion_node_verification_key_hash = [0u8; 32];
-        for (dst, src) in recursion_node_verification_key_hash
-            .array_chunks_mut::<8>()
-            .zip(node_layer_vk_commitment.iter())
-        {
-            let le_bytes = src.to_reduced_u64().to_le_bytes();
-            dst.copy_from_slice(&le_bytes[..]);
-            dst.reverse();
-        }
-
-        let mut leaf_layer_parameters_hash = [0u8; 32];
-        for (dst, src) in leaf_layer_parameters_hash
-            .array_chunks_mut::<8>()
-            .zip(leaf_layer_parameters_commitment.iter())
-        {
-            let le_bytes = src.to_reduced_u64().to_le_bytes();
-            dst.copy_from_slice(&le_bytes[..]);
-            dst.reverse();
-        }
-
-        flattened_public_input.extend(recursion_node_verification_key_hash);
-        flattened_public_input.extend(leaf_layer_parameters_hash);
-
-        let input_keccak_hash =
-            to_fixed_bytes(Keccak256::digest(&flattened_public_input).as_slice());
-        let mut public_inputs = vec![];
-        use circuit_definitions::boojum::field::PrimeField;
-        use circuit_definitions::boojum::field::U64Representable;
-        use circuit_definitions::zkevm_circuits::scheduler::NUM_SCHEDULER_PUBLIC_INPUTS;
-        let take_by = GoldilocksField::CAPACITY_BITS / 8;
-
-        for chunk in input_keccak_hash
-            .chunks_exact(take_by)
-            .take(NUM_SCHEDULER_PUBLIC_INPUTS)
-        {
-            let mut buffer = [0u8; 8];
-            buffer[1..].copy_from_slice(chunk);
-            let as_field_element = GoldilocksField::from_u64_unchecked(u64::from_be_bytes(buffer));
-            public_inputs.push(as_field_element);
-        }
+        let public_inputs = compute_public_inputs(network, batch_number, l1_rpc)
+            .await
+            .unwrap();
 
         let valid_public_inputs = valid_public_inputs.unwrap();
 
