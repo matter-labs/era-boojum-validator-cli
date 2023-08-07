@@ -22,7 +22,7 @@ impl<T: 'static + Clone> ParametersRangeHolder<T> {
     }
 }
 
-// These CIRCUIT_XX objects contain the commitment to the verification key for Lead and Node circuits.
+// These CIRCUIT_XX objects contain the commitment to the verification key for Leaf and Node circuits.
 // The Scheduler circuit verification key is separate (and currently hardcoded in keys/verification_scheduler_key.json file).
 const CIRCUIT_V1: [[u64; 4]; 2] = [
     [
@@ -69,6 +69,21 @@ const CIRCUIT_V3: [[u64; 4]; 2] = [
     ],
 ];
 
+const CIRCUIT_V4: [[u64; 4]; 2] = [
+    [
+        0x924fff6035db1447,
+        0x08ade2ca87966171,
+        0x9bcd16e9c356374f,
+        0x73166fe5eeade0f0,
+    ],
+    [
+        0x5a3ef282b21e12fe,
+        0x1f4438e5bb158fc5,
+        0x060b160559c5158c,
+        0x6389d62d9fe3d080,
+    ],
+];
+
 pub fn to_goldilocks(circuit: [[u64; 4]; 2]) -> [[GoldilocksField; 4]; 2] {
     circuit.map(|x| x.map(|y| GoldilocksField::from_u64_unchecked(y)))
 }
@@ -85,9 +100,10 @@ pub fn get_mainnet_params_holder() -> CommitsHolder {
                 to_goldilocks(CIRCUIT_V1),
             ),
             (109816..115165, to_goldilocks(CIRCUIT_V2)),
+            (115165..141335, to_goldilocks(CIRCUIT_V3)),
         ],
 
-        current: (115165, to_goldilocks(CIRCUIT_V3)),
+        current: (141335, to_goldilocks(CIRCUIT_V4)),
     }
 }
 
