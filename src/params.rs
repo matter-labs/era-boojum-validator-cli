@@ -84,6 +84,21 @@ const CIRCUIT_V4: [[u64; 4]; 2] = [
     ],
 ];
 
+const CIRCUIT_V5: [[u64; 4]; 2] = [
+    [
+        0x72167c43a46cf388,
+        0x75b267d67716edc4,
+        0x563861364a3c03ab,
+        0x7aee73498421e828
+    ],
+    [
+        0x5a3ef282b21e12fe,
+        0x1f4438e5bb158fc5,
+        0x060b160559c5158c,
+        0x6389d62d9fe3d080,
+    ],
+];
+
 pub fn to_goldilocks(circuit: [[u64; 4]; 2]) -> [[GoldilocksField; 4]; 2] {
     circuit.map(|x| x.map(|y| GoldilocksField::from_u64_unchecked(y)))
 }
@@ -101,9 +116,10 @@ pub fn get_mainnet_params_holder() -> CommitsHolder {
             ),
             (109816..115165, to_goldilocks(CIRCUIT_V2)),
             (115165..141335, to_goldilocks(CIRCUIT_V3)),
+            (141335..174710, to_goldilocks(CIRCUIT_V4))
         ],
 
-        current: (141335, to_goldilocks(CIRCUIT_V4)),
+        current: (174710, to_goldilocks(CIRCUIT_V5)),
     }
 }
 
