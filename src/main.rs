@@ -51,12 +51,18 @@ pub fn proof_from_file<T: for<'a> Deserialize<'a>>(proof_path: &str) -> T {
     let proof: T = bincode::deserialize(buffer.as_slice()).unwrap();
     proof
 }
+fn get_scheduler_key_for_batch(batch_number: u64) -> &'static [u8] {
+    match batch_number {
+        1..=174710 => include_bytes!("keys/verification_scheduler_key.json"),
+        _ => include_bytes!("keys/verification_scheduler_key_v5.json"),
+    }
+}
 
 /// Verifies a given proof from "Scheduler" circuit.
-pub fn verify_scheduler_proof(proof_path: &str) -> anyhow::Result<Vec<GoldilocksField>> {
+pub fn verify_scheduler_proof(proof_path: &str, batch_number: u64) -> anyhow::Result<Vec<GoldilocksField>> {
     let scheduler_key: ZkSyncRecursionLayerStorage<
         VerificationKey<GoldilocksField, BaseProofsTreeHasher>,
-    > = serde_json::from_slice(include_bytes!("keys/verification_scheduler_key.json")).unwrap();
+    > = serde_json::from_slice(get_scheduler_key_for_batch(batch_number)).unwrap();
 
     let proof = proof_from_file(proof_path);
     if let FriProofWrapper::Recursive(proof) = proof {
@@ -267,7 +273,7 @@ async fn main() {
     let proof_path = proof_response.unwrap();
 
     // First, we verify that the proof itself is valid.
-    let valid_public_inputs = verify_scheduler_proof(&proof_path);
+    let valid_public_inputs = verify_scheduler_proof(&proof_path, batch_number);
     if valid_public_inputs.is_err() {
         println!("Proof is {}", "INVALID".red());
         return;
@@ -331,7 +337,7 @@ mod test {
     use super::*;
     #[test]
     fn test_scheduler_proof() {
-        verify_scheduler_proof("example_proofs/proof_52272951.bin").expect("FAILED");
+        verify_scheduler_proof("example_proofs/proof_52272951.bin", 52272951).expect("FAILED");
     }
     #[test]
 
