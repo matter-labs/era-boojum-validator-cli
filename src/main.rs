@@ -54,7 +54,7 @@ pub fn proof_from_file<T: for<'a> Deserialize<'a>>(proof_path: &str) -> T {
 fn get_scheduler_key_for_batch(batch_number: u64) -> &'static [u8] {
     match batch_number {
         1..=174710 => include_bytes!("keys/verification_scheduler_key.json"),
-        _ => include_bytes!("keys/verification_scheduler_key_174710.json"),
+        _ => include_bytes!("keys/verification_scheduler_key_v5.json"),
     }
 }
 
