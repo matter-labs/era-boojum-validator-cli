@@ -1,14 +1,17 @@
 #![feature(array_chunks)]
 
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
-use clap::Parser;
+
+use clap::{Parser, Subcommand};
 use colored::Colorize;
 use serde::Deserialize;
-use std::fs::File;
 use std::io::Read;
+use std::{fs::File, process};
 mod params;
 mod requests;
+mod snark_wrapper_verifier;
 
+use crate::snark_wrapper_verifier::verify_snark;
 pub mod block_header;
 
 use circuit_definitions::boojum::{
@@ -40,6 +43,23 @@ struct Cli {
     #[arg(long)]
     // RPC endpoint to use to fetch L1 information
     l1_rpc: Option<String>,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Verify the proof of the Snark wrapper (which is a wrapped FRI proof).
+    VerifySnarkWrapper(VerifySnarkWrapperArgs),
+}
+
+#[derive(Parser, Debug)]
+pub struct VerifySnarkWrapperArgs {
+    /// Path to the proof file (like l1_batch_proof_17.bin)
+    l1_batch_proof_file: String,
+    /// Snark verification scheduler key (like snark_verification_scheduler_key.json)
+    snark_vk_scheduler_key_file: String,
 }
 
 /// Reads proof (in FriProofWrapper format) from a given bin file.
@@ -59,7 +79,10 @@ fn get_scheduler_key_for_batch(batch_number: u64) -> &'static [u8] {
 }
 
 /// Verifies a given proof from "Scheduler" circuit.
-pub fn verify_scheduler_proof(proof_path: &str, batch_number: u64) -> anyhow::Result<Vec<GoldilocksField>> {
+pub fn verify_scheduler_proof(
+    proof_path: &str,
+    batch_number: u64,
+) -> anyhow::Result<Vec<GoldilocksField>> {
     let scheduler_key: ZkSyncRecursionLayerStorage<
         VerificationKey<GoldilocksField, BaseProofsTreeHasher>,
     > = serde_json::from_slice(get_scheduler_key_for_batch(batch_number)).unwrap();
@@ -105,8 +128,8 @@ pub async fn compute_public_inputs(
     };
 
     let Some([leaf_layer_parameters_commitment, node_layer_vk_commitment]) = params else {
-            anyhow::bail!(format!("Can not get verification keys commitments for batch {}. Either it's too far in the past, or update the CLI", batch_number.to_string().yellow()));
-        };
+        anyhow::bail!(format!("Can not get verification keys commitments for batch {}. Either it's too far in the past, or update the CLI", batch_number.to_string().yellow()));
+    };
 
     println!("{}", "Fetching data from Ethereum L1 for state roots, bootloader and default Account Abstraction parameters".on_blue());
 
@@ -248,6 +271,17 @@ pub async fn compute_public_inputs(
 #[tokio::main]
 async fn main() {
     let opt = Cli::parse();
+    if let Some(command) = opt.command {
+        // Expert commands
+        let result = match command {
+            Commands::VerifySnarkWrapper(args) => verify_snark(&args).await,
+        };
+        if let Err(error) = result {
+            println!("Command failed: {}", error);
+            process::exit(1);
+        }
+        return;
+    }
 
     let batch_number = opt.batch;
     let network = opt.network.clone().to_string();
