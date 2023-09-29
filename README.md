@@ -117,3 +117,17 @@ Next, we collect data from L1 which includes:
 For now, we also get some auxiliary data (BlockAuxilaryOutput) from GCS, but in the future, when the system is fully deployed, this data will also be fetched from L1.
 
 Finally, we calculate a hash from all these inputs and compare it with the public input of the 'proof'. If they match, it means the computation has been successfully verified.
+
+# Advanced options
+
+## Snark proof verification
+
+Currently we are planning to wrap the final FRI proof, into a SNARK (to lower the size of the proof and cost of verification in L1).
+
+To verify that the wrapper is correct, you can use the ``verify-snark-wrapper`` command. 
+
+WARNING: This verifier is still WIP, so command arguments will change.
+
+```shell
+cargo run  -- verify-snark-wrapper ../zksync-2-dev/artifacts/proofs_fri/l1_batch_proof_1.bin ../zksync-2-dev/prover/vk_setup_data_generator_server_fri/data/snark_verification_scheduler_key.json
+```
