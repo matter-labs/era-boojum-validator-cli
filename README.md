@@ -1,5 +1,22 @@
 # zkSync Era: Boojum verifier CLI
 
+To run local test:
+
+
+```shell
+cargo test test_local_proof --  --nocapture
+```
+
+It tries the local proof with all the fixes, on 24 bit. 
+Both proof and the vkey are in example_proofs/snark_wrapper
+
+It also generates the test, that can be inserted in unittests for Verifier.sol.
+
+
+
+
+
+
 [![Logo](eraLogo.png)](https://zksync.io/)
 # 
 This is an experimental command line tool to verify the proofs for zkSync Era's updated proof system, Boojum [https://github.com/matter-labs/era-boojum](https://github.com/matter-labs/era-boojum).

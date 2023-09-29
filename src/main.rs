@@ -4,6 +4,7 @@ use circuit_definitions::circuit_definitions::recursion_layer::scheduler::Concre
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use requests::{AuxOutputWitnessWrapper, BatchL1Data};
 use serde::Deserialize;
 use std::io::Read;
 use std::{fs::File, process};
@@ -11,6 +12,7 @@ mod params;
 mod requests;
 mod snark_wrapper_verifier;
 
+use crate::params::{to_goldilocks, CIRCUIT_V5};
 use crate::snark_wrapper_verifier::verify_snark;
 pub mod block_header;
 
@@ -95,6 +97,7 @@ pub fn verify_scheduler_proof(
 
         let verifier = verifier_builder.create_verifier();
         let proof = proof.into_inner();
+        println!("Public inputs: {:?}", proof.public_inputs);
         let result = verifier.verify::<BaseProofsTreeHasher, GoldilocksPoisedon2Transcript, NoPow>(
             (),
             &scheduler_key.into_inner(),
@@ -124,12 +127,18 @@ pub async fn compute_public_inputs(
     } else if network == "testnet" {
         self::params::get_testnet_params_holder().get_for_index(batch_number as usize)
     } else {
-        unreachable!();
+        Some(to_goldilocks(CIRCUIT_V5))
+        //unreachable!();
     };
 
     let Some([leaf_layer_parameters_commitment, node_layer_vk_commitment]) = params else {
         anyhow::bail!(format!("Can not get verification keys commitments for batch {}. Either it's too far in the past, or update the CLI", batch_number.to_string().yellow()));
     };
+
+    println!(
+        "Got commitments: {:?}, {:?}",
+        leaf_layer_parameters_commitment, node_layer_vk_commitment
+    );
 
     println!("{}", "Fetching data from Ethereum L1 for state roots, bootloader and default Account Abstraction parameters".on_blue());
 
@@ -140,6 +149,8 @@ pub async fn compute_public_inputs(
         }
         anyhow::bail!("Failed to get data from L1");
     }
+
+    println!("Got l1 data info: {:?}", l1_data);
 
     let l1_data = l1_data.unwrap();
 
@@ -153,7 +164,21 @@ pub async fn compute_public_inputs(
     // After fetching the data, we recreate the public input hash (for which we need information from current and previous block).
 
     let aux_data = aux_data.unwrap();
+    create_input_internal(
+        l1_data,
+        aux_data,
+        leaf_layer_parameters_commitment,
+        node_layer_vk_commitment,
+    )
+    .await
+}
 
+pub async fn create_input_internal(
+    l1_data: BatchL1Data,
+    aux_data: AuxOutputWitnessWrapper,
+    leaf_layer_parameters_commitment: [GoldilocksField; 4],
+    node_layer_vk_commitment: [GoldilocksField; 4],
+) -> anyhow::Result<Vec<GoldilocksField>> {
     // while we do not prove all the blocks we use placeholders for non-state related parts
     // of the previous block
     let previous_block_meta_hash = [0u8; 32];
@@ -359,6 +384,12 @@ async fn main() {
 #[cfg(test)]
 
 mod test {
+    use crate::{proof_from_file};
+    use circuit_definitions::franklin_crypto::bellman::pairing::bn256::{Bn256, Fr};
+    use circuit_definitions::{
+        circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit,
+        franklin_crypto::bellman::plonk::commitments::transcript::keccak_transcript::RollingKeccakTranscript,
+    };
     use circuit_definitions::{
         circuit_definitions::{
             base_layer::ZkSyncBaseLayerStorage,
@@ -367,11 +398,139 @@ mod test {
         },
         ZkSyncDefaultRoundFunction,
     };
+    use colored::Colorize;
+    use std::fs;
+
+    use crate::{requests::AuxOutputWitnessWrapper, snark_wrapper_verifier::L1BatchProofForL1};
 
     use super::*;
     #[test]
     fn test_scheduler_proof() {
         verify_scheduler_proof("example_proofs/proof_52272951.bin", 52272951).expect("FAILED");
+    }
+
+    #[tokio::test]
+    async fn test_local_proof() {
+        let proof: L1BatchProofForL1 =
+            proof_from_file("example_proofs/snark_wrapper/l1_batch_proof_1.bin");
+
+        println!("=== Loading verification key.");
+        use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
+        let vk_inner : circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> = 
+        serde_json::from_str(&fs::read_to_string("example_proofs/snark_wrapper/snark_verification_scheduler_key.json").unwrap()).unwrap();
+
+        println!("Verifying the proof");
+        let is_valid =
+            verify::<_, _, RollingKeccakTranscript<Fr>>(&vk_inner, &proof.scheduler_proof, None)
+                .unwrap();
+
+        if !is_valid {
+            println!("Proof is {}", "INVALID".red());
+            assert!(false, "Proof is not valid");
+        } else {
+            println!("Proof is {}", "VALID".green());
+        };
+
+        let aux_witness = AuxOutputWitnessWrapper {
+            0 : circuit_definitions::zkevm_circuits::scheduler::block_header::BlockAuxilaryOutputWitness{
+                l1_messages_linear_hash:proof.aggregation_result_coords[0], 
+                rollup_state_diff_for_compression: proof.aggregation_result_coords[1], bootloader_heap_initial_content: proof.aggregation_result_coords[2], events_queue_state: proof.aggregation_result_coords[3] },
+
+        };
+
+        println!("=== Aux inputs:");
+        println!(
+            "  L1 msg linead hash:                  0x{:}",
+            hex::encode(proof.aggregation_result_coords[0])
+        );
+        println!(
+            "  Rollup state diff for compression:   0x{:}",
+            hex::encode(proof.aggregation_result_coords[1])
+        );
+        println!(
+            "  Bootloader heap initial content:     0x{:}",
+            hex::encode(proof.aggregation_result_coords[2])
+        );
+        println!(
+            "  Events queue state:                  0x{:}",
+            hex::encode(proof.aggregation_result_coords[3])
+        );
+
+        let bootloader_code =
+            hex::decode("01000923e7c6e9e116c813f5e9b45eda88e3892d9150839bd6004c2df1846d46")
+                .unwrap();
+        let mut bootloader_code_array = [0u8; 32];
+        bootloader_code_array.copy_from_slice(&bootloader_code);
+
+        let default_aa_code =
+            hex::decode("0100067d70019d4919b5c8423df00fa89a5c53e734bccc1ad4a92e99df7474ab")
+                .unwrap();
+        let mut default_aa_array = [0u8; 32];
+        default_aa_array.copy_from_slice(&default_aa_code);
+
+        let prev_enum_counter = 23;
+        let prev_root =
+            hex::decode("38a3e641bf44aca21abf4cdfa2cac66cd1f222149e24105f6bfac98e0fc87503")
+                .unwrap();
+
+        let enum_counter = 83;
+        let root = hex::decode("0557c172fdfa63645c318a741c7c53b38a8fcf12421d8d4ce311e4e633dbcafb")
+            .unwrap();
+
+        let [leaf_layer_parameters_commitment, node_layer_vk_commitment] =
+            to_goldilocks(CIRCUIT_V5);
+        let l1_data = BatchL1Data {
+            previous_enumeration_counter: prev_enum_counter,
+            previous_root: prev_root,
+            new_enumeration_counter: enum_counter,
+            new_root: root,
+            default_aa_hash: default_aa_array,
+            bootloader_hash: bootloader_code_array,
+        };
+
+        let proof_input = proof.scheduler_proof.inputs[0];
+        println!("proof input: {:?}", proof_input);
+
+
+        let result = create_input_internal(
+            l1_data,
+            aux_witness,
+            leaf_layer_parameters_commitment,
+            node_layer_vk_commitment,
+        )
+        .await;
+        println!("RESULT: {:?}", result);
+
+        let foo = proof.scheduler_proof;
+
+        let (inputs, mut serialized_proof) = codegen::serialize_proof(&foo);
+
+        // Taken from zksync-2-dev -- not sure why..
+        serialized_proof.extend(&[
+            "2d360628289ff943ff6bd1a87bbe4e62abe7fb61ba83effd266f22bdcf31e6f9"
+                .parse()
+                .unwrap(),
+            "26b92a79e563c3f48252cce7feeca2f0f8d33dcb4ef7b0643bf07bd405700aaa"
+                .parse()
+                .unwrap(),
+            1.into(),
+            2.into(),
+        ]);
+
+        println!("const PROOF = {{");
+        println!("    publicInputs: ['0x{:x}'],", inputs[0]);
+        println!("    serializedProof: [");
+        for p in serialized_proof {
+            println!("        '0x{:x}',", p);
+        }
+
+        println!("],");
+        println!("recursiveAggregationInput: [");
+        for agg in proof.aggregation_result_coords.iter() {
+            println!("'0x{}',", hex::encode(agg));
+        }
+
+        println!("]\n}};",);
     }
     #[test]
 

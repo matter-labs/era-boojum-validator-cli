@@ -1,12 +1,13 @@
 use std::fs;
 
-use colored::Colorize;
 use crate::{proof_from_file, VerifySnarkWrapperArgs};
 use circuit_definitions::franklin_crypto::bellman::pairing::bn256::{Bn256, Fr};
 use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
-use circuit_definitions::{circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit, franklin_crypto::bellman::plonk::commitments::transcript::keccak_transcript::RollingKeccakTranscript};
-
-
+use circuit_definitions::{
+    circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit,
+    franklin_crypto::bellman::plonk::commitments::transcript::keccak_transcript::RollingKeccakTranscript,
+};
+use colored::Colorize;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct L1BatchProofForL1 {
@@ -15,7 +16,7 @@ pub struct L1BatchProofForL1 {
     pub scheduler_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit>,
 }
 
-pub async fn verify_snark(args: &VerifySnarkWrapperArgs) -> Result<(), String>{
+pub async fn verify_snark(args: &VerifySnarkWrapperArgs) -> Result<(), String> {
     println!("Verifying SNARK wrapped FRI proof.");
 
     let proof: L1BatchProofForL1 = proof_from_file(&args.l1_batch_proof_file);
@@ -44,13 +45,26 @@ pub async fn verify_snark(args: &VerifySnarkWrapperArgs) -> Result<(), String>{
         serde_json::from_str(&fs::read_to_string(args.snark_vk_scheduler_key_file.clone()).unwrap()).unwrap();
 
     println!("Verifying the proof");
-    let is_valid = verify::<_, _, RollingKeccakTranscript<Fr>>(&vk_inner, &proof.scheduler_proof, None).unwrap();
+    let is_valid =
+        verify::<_, _, RollingKeccakTranscript<Fr>>(&vk_inner, &proof.scheduler_proof, None)
+            .unwrap();
 
     if !is_valid {
         println!("Proof is {}", "INVALID".red());
-        Err("Proof is not valid".to_owned())
+        return Err("Proof is not valid".to_owned());
     } else {
         println!("Proof is {}", "VALID".green());
-        Ok(())
-    }
+    };
+
+    // We expect only 1 private input.
+    assert!(
+        proof.scheduler_proof.inputs.len() == 1,
+        "Expected exactly 1 public input in the proof"
+    );
+
+    let public_input = proof.scheduler_proof.inputs[0];
+
+    println!("Private input is: {:?}", public_input);
+
+    Ok(())
 }

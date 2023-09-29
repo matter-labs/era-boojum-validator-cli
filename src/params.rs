@@ -84,12 +84,12 @@ const CIRCUIT_V4: [[u64; 4]; 2] = [
     ],
 ];
 
-const CIRCUIT_V5: [[u64; 4]; 2] = [
+pub const CIRCUIT_V5: [[u64; 4]; 2] = [
     [
         0x72167c43a46cf388,
         0x75b267d67716edc4,
         0x563861364a3c03ab,
-        0x7aee73498421e828
+        0x7aee73498421e828,
     ],
     [
         0x5a3ef282b21e12fe,
@@ -116,7 +116,7 @@ pub fn get_mainnet_params_holder() -> CommitsHolder {
             ),
             (109816..115165, to_goldilocks(CIRCUIT_V2)),
             (115165..141335, to_goldilocks(CIRCUIT_V3)),
-            (141335..174710, to_goldilocks(CIRCUIT_V4))
+            (141335..174710, to_goldilocks(CIRCUIT_V4)),
         ],
 
         current: (174710, to_goldilocks(CIRCUIT_V5)),
