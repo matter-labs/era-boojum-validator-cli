@@ -298,6 +298,7 @@ checksum = "2dabbe35f96fb9507f7330793dc490461b2962659ac5d427181e451a623751d1"
 [[package]]
 name = "bellman_ce"
 version = "0.3.2"
+source = "git+https://github.com/matter-labs/bellman?branch=snark-wrapper#1f05c528c392ea9eadb99b22431659c113bc0af4"
 dependencies = [
  "arrayvec 0.7.4",
  "bit-vec",
@@ -412,6 +413,7 @@ dependencies = [
 [[package]]
 name = "blake2s_const"
 version = "0.6.0"
+source = "git+https://github.com/matter-labs/bellman?branch=snark-wrapper#1f05c528c392ea9eadb99b22431659c113bc0af4"
 dependencies = [
  "arrayref",
  "arrayvec 0.5.2",

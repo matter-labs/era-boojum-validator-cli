@@ -20,6 +20,3 @@ reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 ethers = {version = "1", features = ["ws", "rustls"]}
 sha3 = "*"
-
-[patch."https://github.com/matter-labs/bellman"]
-bellman_ce = { path = "../bellman" }
