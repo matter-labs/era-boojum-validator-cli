@@ -119,12 +119,7 @@ pub async fn fetch_l1_data(
     let DIAMOND_PROXY = if network.to_string() == "mainnet" {
         "32400084c286cf3e17e7b677ea9583e60a000324"
     } else {
-        if network.to_string() == "localnet" {
-            // DIAMOND_PROXY from ENV
-            "0xFC073319977e314F251EAE6ae6bE76B0B3BAeeCF"
-        } else {
-            "1908e2BF4a88F91E4eF0DC72f02b8Ea36BEa2319"
-        }
+        "1908e2BF4a88F91E4eF0DC72f02b8Ea36BEa2319"
     };
 
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
@@ -141,9 +136,6 @@ pub async fn fetch_l1_data(
             .await
             .map_err(|_| format!("failed to find commit transaction for block {}", b_number))
             .unwrap();
-
-        println!("bnumber: {} tx: {}", b_number, commit_tx);
-        println!("Tx hash: {:?}", TxHash::from_str(&commit_tx).unwrap());
 
         let tx = client
             .get_transaction(TxHash::from_str(&commit_tx).unwrap())
