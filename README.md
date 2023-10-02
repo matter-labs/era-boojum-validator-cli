@@ -146,5 +146,17 @@ To verify that the wrapper is correct, you can use the ``verify-snark-wrapper`` 
 WARNING: This verifier is still WIP, so command arguments will change.
 
 ```shell
-cargo run  -- verify-snark-wrapper ../zksync-2-dev/artifacts/proofs_fri/l1_batch_proof_1.bin ../zksync-2-dev/prover/vk_setup_data_generator_server_fri/data/snark_verification_scheduler_key.json
+cargo run  -- verify-snark-wrapper example_proofs/snark_wrapper/l1_batch_proof_1.bin example_proofs/snark_wrapper/snark_verification_scheduler_key.json
+```
+
+You can also generate the solidity test for Verifier.sol, by running:
+
+```shell
+cargo run -- generate-solidity-test example_proofs/snark_wrapper/l1_batch_proof_1.bin
+```
+
+There is also a larger test inside, that computes the public inputs hash:
+
+```shell
+cargo test test_local_proof --  --nocapture
 ```
