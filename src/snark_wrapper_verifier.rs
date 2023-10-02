@@ -1,6 +1,7 @@
 use std::fs;
 
-use crate::{proof_from_file, VerifySnarkWrapperArgs};
+use crate::requests::AuxOutputWitnessWrapper;
+use crate::{proof_from_file, GenerateSolidityTestArgs, VerifySnarkWrapperArgs};
 use circuit_definitions::franklin_crypto::bellman::pairing::bn256::{Bn256, Fr};
 use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
 use circuit_definitions::{
@@ -16,7 +17,9 @@ pub struct L1BatchProofForL1 {
     pub scheduler_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit>,
 }
 
-pub async fn verify_snark(args: &VerifySnarkWrapperArgs) -> Result<(), String> {
+pub async fn verify_snark(
+    args: &VerifySnarkWrapperArgs,
+) -> Result<(Fr, AuxOutputWitnessWrapper), String> {
     println!("Verifying SNARK wrapped FRI proof.");
 
     let proof: L1BatchProofForL1 = proof_from_file(&args.l1_batch_proof_file);
@@ -41,7 +44,7 @@ pub async fn verify_snark(args: &VerifySnarkWrapperArgs) -> Result<(), String> {
 
     println!("=== Loading verification key.");
     use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
-    let vk_inner : circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> = 
+    let vk_inner : circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> =
         serde_json::from_str(&fs::read_to_string(args.snark_vk_scheduler_key_file.clone()).unwrap()).unwrap();
 
     println!("Verifying the proof");
@@ -65,6 +68,30 @@ pub async fn verify_snark(args: &VerifySnarkWrapperArgs) -> Result<(), String> {
     let public_input = proof.scheduler_proof.inputs[0];
 
     println!("Private input is: {:?}", public_input);
+    let aux_witness = AuxOutputWitnessWrapper {
+        0 : circuit_definitions::zkevm_circuits::scheduler::block_header::BlockAuxilaryOutputWitness{
+            l1_messages_linear_hash:proof.aggregation_result_coords[0],
+            rollup_state_diff_for_compression: proof.aggregation_result_coords[1], bootloader_heap_initial_content: proof.aggregation_result_coords[2], events_queue_state: proof.aggregation_result_coords[3] },
 
+    };
+
+    Ok((public_input, aux_witness))
+}
+
+pub async fn generate_solidity_test(args: &GenerateSolidityTestArgs) -> Result<(), String> {
+    let proof: L1BatchProofForL1 = proof_from_file(&args.l1_batch_proof_file);
+
+    let (inputs, serialized_proof) = codegen::serialize_proof(&proof.scheduler_proof);
+
+    println!("const PROOF = {{");
+    println!("    publicInputs: ['0x{:x}'],", inputs[0]);
+    println!("    serializedProof: [");
+    for p in serialized_proof {
+        println!("        '0x{:x}',", p);
+    }
+
+    println!("],");
+
+    println!("recursiveAggregationInput: [] \n }};");
     Ok(())
 }
