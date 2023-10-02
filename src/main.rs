@@ -204,11 +204,16 @@ pub async fn create_input_internal(
         Keccak256::digest(&previous_passthrough_data.into_flattened_bytes()).as_slice(),
     );
 
+    println!("PREVIOUS passhtrough: {}", hex::encode(previous_passthrough_data_hash));
+
     let previous_block_content_hash = BlockContentHeader::formal_block_hash_from_partial_hashes(
         previous_passthrough_data_hash,
         previous_block_meta_hash,
         previous_block_aux_hash,
     );
+
+    println!("PREVIOUS content hash: {}", hex::encode(previous_block_content_hash));
+
 
     let new_passthrough_data = BlockPassthroughData {
         per_shard_states: [
@@ -246,6 +251,8 @@ pub async fn create_input_internal(
     };
     let this_block_content_hash = new_header.into_formal_block_hash().0;
 
+    println!("This block content hash: {}", hex::encode(this_block_content_hash));
+
     let mut flattened_public_input = vec![];
     flattened_public_input.extend(previous_block_content_hash);
     flattened_public_input.extend(this_block_content_hash);
@@ -271,10 +278,14 @@ pub async fn create_input_internal(
         dst.reverse();
     }
 
+    println!("Recursion noder hash: {}", hex::encode(recursion_node_verification_key_hash));
+    println!("Leaf layer hash: {}", hex::encode(leaf_layer_parameters_hash));
+
     flattened_public_input.extend(recursion_node_verification_key_hash);
     flattened_public_input.extend(leaf_layer_parameters_hash);
 
     let input_keccak_hash = to_fixed_bytes(Keccak256::digest(&flattened_public_input).as_slice());
+    println!("Resulting input keccak hash: {}", hex::encode(input_keccak_hash));
     let mut public_inputs = vec![];
     use circuit_definitions::boojum::field::PrimeField;
     use circuit_definitions::boojum::field::U64Representable;
@@ -420,6 +431,8 @@ mod test {
         serde_json::from_str(&fs::read_to_string("example_proofs/snark_wrapper/snark_verification_scheduler_key.json").unwrap()).unwrap();
 
         println!("Verifying the proof");
+        let proof_input = proof.scheduler_proof.inputs[0];
+        println!("proof inputXX: {:?}", proof_input);
         let is_valid =
             verify::<_, _, RollingKeccakTranscript<Fr>>(&vk_inner, &proof.scheduler_proof, None)
                 .unwrap();
@@ -501,21 +514,7 @@ mod test {
         .await;
         println!("RESULT: {:?}", result);
 
-        let foo = proof.scheduler_proof;
-
-        let (inputs, mut serialized_proof) = codegen::serialize_proof(&foo);
-
-        // Taken from zksync-2-dev -- not sure why..
-        serialized_proof.extend(&[
-            "2d360628289ff943ff6bd1a87bbe4e62abe7fb61ba83effd266f22bdcf31e6f9"
-                .parse()
-                .unwrap(),
-            "26b92a79e563c3f48252cce7feeca2f0f8d33dcb4ef7b0643bf07bd405700aaa"
-                .parse()
-                .unwrap(),
-            1.into(),
-            2.into(),
-        ]);
+        let (inputs, serialized_proof) = codegen::serialize_proof(&proof.scheduler_proof);
 
         println!("const PROOF = {{");
         println!("    publicInputs: ['0x{:x}'],", inputs[0]);
@@ -525,12 +524,8 @@ mod test {
         }
 
         println!("],");
-        println!("recursiveAggregationInput: [");
-        for agg in proof.aggregation_result_coords.iter() {
-            println!("'0x{}',", hex::encode(agg));
-        }
-
-        println!("]\n}};",);
+        println!("recursiveAggregationInput: [] \n }};");
+        
     }
     #[test]
 

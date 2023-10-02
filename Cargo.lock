@@ -298,7 +298,6 @@ checksum = "2dabbe35f96fb9507f7330793dc490461b2962659ac5d427181e451a623751d1"
 [[package]]
 name = "bellman_ce"
 version = "0.3.2"
-source = "git+https://github.com/matter-labs/bellman?branch=snark-wrapper#1f05c528c392ea9eadb99b22431659c113bc0af4"
 dependencies = [
  "arrayvec 0.7.4",
  "bit-vec",
@@ -413,7 +412,6 @@ dependencies = [
 [[package]]
 name = "blake2s_const"
 version = "0.6.0"
-source = "git+https://github.com/matter-labs/bellman?branch=snark-wrapper#1f05c528c392ea9eadb99b22431659c113bc0af4"
 dependencies = [
  "arrayref",
  "arrayvec 0.5.2",
@@ -487,7 +485,7 @@ dependencies = [
  "blake2 0.10.6",
  "const_format",
  "convert_case",
- "crossbeam 0.7.3",
+ "crossbeam 0.8.2",
  "crypto-bigint 0.5.2",
  "cs_derive",
  "derivative",
@@ -3294,7 +3292,7 @@ dependencies = [
 [[package]]
 name = "rescue_poseidon"
 version = "0.4.1"
-source = "git+https://github.com/matter-labs/rescue-poseidon.git?branch=poseidon2#d6903256fa17815b86d4d78ddcae9e5cd920e22c"
+source = "git+https://github.com/matter-labs/rescue-poseidon.git?branch=poseidon2#09b96e7e82dadac151d8d681f017cb6a16961801"
 dependencies = [
  "addchain",
  "arrayvec 0.7.4",

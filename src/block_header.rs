@@ -11,12 +11,14 @@ pub struct BlockPassthroughData {
     pub per_shard_states: [PerShardState; NUM_SHARDS],
 }
 
+#[derive(Debug)]
 pub struct BlockMetaParameters {
     pub zkporter_is_available: bool,
     pub bootloader_code_hash: [u8; 32],
     pub default_aa_code_hash: [u8; 32],
 }
 
+#[derive(Debug)]
 pub struct BlockAuxilaryOutput {
     pub l1_messages_linear_hash: [u8; 32],
     pub rollup_state_diff_for_compression: [u8; 32],
@@ -95,14 +97,23 @@ impl BlockContentHeader {
     pub fn into_formal_block_hash(self) -> ([u8; 32], ([u8; 32], [u8; 32], [u8; 32])) {
         // everything is BE
         let block_data = self.block_data.into_flattened_bytes();
+        println!("Block meta: {:?}", self.block_meta);
         let block_meta = self.block_meta.into_flattened_bytes();
         let auxilary_output = self.auxilary_output.into_flattened_bytes();
+        println!("AUX: {:?}", self.auxilary_output);
 
         let block_data_hash = to_fixed_bytes(Keccak256::digest(&block_data).as_slice());
 
         let block_meta_hash = to_fixed_bytes(Keccak256::digest(&block_meta).as_slice());
 
         let auxilary_output_hash = to_fixed_bytes(Keccak256::digest(&auxilary_output).as_slice());
+
+        println!(
+            "block data hash (passthrough): {}",
+            hex::encode(block_data_hash)
+        );
+        println!("metadata: {}", hex::encode(block_meta_hash));
+        println!("aux: {}", hex::encode(auxilary_output_hash));
 
         let block_hash = Self::formal_block_hash_from_partial_hashes(
             block_data_hash,
