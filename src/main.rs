@@ -166,6 +166,8 @@ pub async fn compute_public_inputs(
         aux_data,
         leaf_layer_parameters_commitment,
         node_layer_vk_commitment,
+        None,
+        None,
     )
     .await
 }
@@ -175,11 +177,13 @@ pub async fn create_input_internal(
     aux_data: AuxOutputWitnessWrapper,
     leaf_layer_parameters_commitment: [GoldilocksField; 4],
     node_layer_vk_commitment: [GoldilocksField; 4],
+    previous_block_meta_hash: Option<[u8; 32]>,
+    previous_block_aux_hash: Option<[u8; 32]>,
 ) -> anyhow::Result<Vec<GoldilocksField>> {
     // while we do not prove all the blocks we use placeholders for non-state related parts
     // of the previous block
-    let previous_block_meta_hash = [0u8; 32];
-    let previous_block_aux_hash = [0u8; 32];
+    let previous_block_meta_hash = previous_block_meta_hash.unwrap_or([0u8; 32]);
+    let previous_block_aux_hash = previous_block_aux_hash.unwrap_or([0u8; 32]);
 
     use self::block_header::*;
     use sha3::{Digest, Keccak256};
@@ -452,6 +456,89 @@ mod test {
             aux_witness,
             leaf_layer_parameters_commitment,
             node_layer_vk_commitment,
+            None,
+            None,
+        )
+        .await;
+        println!("computed proof input: {:?}", result);
+
+        let r = result.unwrap();
+        let mut recomputed_input = Fr::zero();
+        // Right now we go in reverse order, but it might be changed soon.
+        for i in (0..4).rev() {
+            // 56 - as we only push 7 bytes.
+            for _ in 0..56 {
+                recomputed_input.double();
+            }
+            recomputed_input.add_assign(&Fr::from_str(&format!("{}", r[i].0)).unwrap());
+        }
+
+        assert_eq!(recomputed_input, public_input, "Public input doesn't match");
+    }
+
+    // this is the proof with fixed public input computation - that includes the full previous block commitment.
+    #[tokio::test]
+    async fn test_local_proof_v2() {
+        let (public_input, aux_witness) = verify_snark(&VerifySnarkWrapperArgs {
+            l1_batch_proof_file: "example_proofs/snark_wrapper/v2/l1_batch_proof_1.bin".to_string(),
+            snark_vk_scheduler_key_file:
+                "example_proofs/snark_wrapper/v2/snark_verification_scheduler_key.json".to_string(),
+        })
+        .await
+        .unwrap();
+
+        // select bootloader_code_hash from protocol_versions
+        let bootloader_code =
+            hex::decode("010009416e909e0819593a9806bbc841d25c5cdfed3f4a1523497c6814e5194a")
+                .unwrap();
+        let mut bootloader_code_array = [0u8; 32];
+        bootloader_code_array.copy_from_slice(&bootloader_code);
+
+        // select default_account_code_hash from protocol_versions
+        let default_aa_code =
+            hex::decode("0100065d134a862a777e50059f5e0fbe68b583f3617a67820f7edda0d7f253a0")
+                .unwrap();
+        let mut default_aa_array = [0u8; 32];
+        default_aa_array.copy_from_slice(&default_aa_code);
+
+        // select rollout_last_leaf_incex form l1_batches;
+        let prev_enum_counter = 23;
+        // select merkle root hash
+        let prev_root =
+            hex::decode("16914ac26bb9cafa0f1dfaeaab10745a9094e1b60c7076fedf21651d6a25b574")
+                .unwrap();
+
+        let enum_counter = 84;
+        let root = hex::decode("9cf7bb72401a56039ca097cabed20a72221c944ed9b0e515c083c04663ab45a6")
+            .unwrap();
+
+        let [leaf_layer_parameters_commitment, node_layer_vk_commitment] =
+            to_goldilocks(CIRCUIT_V5);
+        let l1_data = BatchL1Data {
+            previous_enumeration_counter: prev_enum_counter,
+            previous_root: prev_root,
+            new_enumeration_counter: enum_counter,
+            new_root: root,
+            default_aa_hash: default_aa_array,
+            bootloader_hash: bootloader_code_array,
+        };
+
+        let previous_meta_hash =
+            hex::decode("224e9e504599641655d4041e3776f362d10ea59965bfd2c78c05d8dc5b16ef8e")
+                .unwrap();
+        let previous_aux_hash =
+            hex::decode("7c613c82ec911cf56dd6241854dd87bd538e0201f4ff0735f56a1a013db6466a")
+                .unwrap();
+
+        println!("proof input: {:?}", public_input);
+
+        let result = create_input_internal(
+            l1_data,
+            aux_witness,
+            leaf_layer_parameters_commitment,
+            node_layer_vk_commitment,
+            Some(previous_meta_hash.try_into().unwrap()),
+            Some(previous_aux_hash.try_into().unwrap()),
         )
         .await;
         println!("computed proof input: {:?}", result);
