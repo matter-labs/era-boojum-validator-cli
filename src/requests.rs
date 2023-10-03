@@ -84,6 +84,7 @@ pub async fn fetch_aux_data_from_storage(
     Ok(result)
 }
 
+#[derive(Debug)]
 pub struct BatchL1Data {
     pub previous_enumeration_counter: u64,
     pub previous_root: Vec<u8>,
@@ -270,13 +271,13 @@ fn find_state_data_from_log(
         panic!();
     };
 
-    let abi::Token::Uint(previous_l2_block_number) = first_param[0].clone() else  {
+    let abi::Token::Uint(previous_l2_block_number) = first_param[0].clone() else {
         panic!()
     };
     if previous_l2_block_number.as_u64() >= batch_number {
         panic!("invalid log from L1");
     }
-    let abi::Token::Uint(previous_enumeration_index) = first_param[2].clone() else  {
+    let abi::Token::Uint(previous_enumeration_index) = first_param[2].clone() else {
         panic!()
     };
     let _previous_enumeration_index = previous_enumeration_index.0[0];
@@ -291,17 +292,17 @@ fn find_state_data_from_log(
         let abi::Token::Tuple(inner) = inner else {
             panic!()
         };
-        let abi::Token::Uint(new_l2_block_number) = inner[0].clone() else  {
+        let abi::Token::Uint(new_l2_block_number) = inner[0].clone() else {
             panic!()
         };
         let new_l2_block_number = new_l2_block_number.0[0];
         if new_l2_block_number == batch_number {
-            let abi::Token::Uint(new_enumeration_index) = inner[2].clone() else  {
+            let abi::Token::Uint(new_enumeration_index) = inner[2].clone() else {
                 panic!()
             };
             let new_enumeration_index = new_enumeration_index.0[0];
 
-            let abi::Token::FixedBytes(state_root) = inner[3].clone() else  {
+            let abi::Token::FixedBytes(state_root) = inner[3].clone() else {
                 panic!()
             };
 

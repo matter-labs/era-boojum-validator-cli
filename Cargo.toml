@@ -5,6 +5,9 @@ edition = "2021"
 
 [dependencies]
 circuit_definitions = {git = "https://github.com/matter-labs/era-zkevm_test_harness.git", branch="v1.4.0"}
+# circuit_definitions = { path = "../zkevm_test_harness/circuit_definitions"}
+codegen = { git = "https://github.com/matter-labs/solidity_plonk_verifier.git", branch = "snark_wrapper" }
+#codegen = { path = "../solidity_plonk_verifier/codegen" }
 
 hex = "*"
 bincode = "*"
@@ -17,4 +20,3 @@ reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 ethers = {version = "1", features = ["ws", "rustls"]}
 sha3 = "*"
-

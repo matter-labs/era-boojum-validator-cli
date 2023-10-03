@@ -1,5 +1,22 @@
 # zkSync Era: Boojum verifier CLI
 
+To run local test:
+
+
+```shell
+cargo test test_local_proof --  --nocapture
+```
+
+It tries the local proof with all the fixes, on 24 bit. 
+Both proof and the vkey are in example_proofs/snark_wrapper
+
+It also generates the test, that can be inserted in unittests for Verifier.sol.
+
+
+
+
+
+
 [![Logo](eraLogo.png)](https://zksync.io/)
 # 
 This is an experimental command line tool to verify the proofs for zkSync Era's updated proof system, Boojum [https://github.com/matter-labs/era-boojum](https://github.com/matter-labs/era-boojum).
@@ -129,5 +146,17 @@ To verify that the wrapper is correct, you can use the ``verify-snark-wrapper`` 
 WARNING: This verifier is still WIP, so command arguments will change.
 
 ```shell
-cargo run  -- verify-snark-wrapper ../zksync-2-dev/artifacts/proofs_fri/l1_batch_proof_1.bin ../zksync-2-dev/prover/vk_setup_data_generator_server_fri/data/snark_verification_scheduler_key.json
+cargo run  -- verify-snark-wrapper example_proofs/snark_wrapper/l1_batch_proof_1.bin example_proofs/snark_wrapper/snark_verification_scheduler_key.json
+```
+
+You can also generate the solidity test for Verifier.sol, by running:
+
+```shell
+cargo run -- generate-solidity-test example_proofs/snark_wrapper/l1_batch_proof_1.bin
+```
+
+There is also a larger test inside, that computes the public inputs hash:
+
+```shell
+cargo test test_local_proof --  --nocapture
 ```

@@ -11,12 +11,14 @@ pub struct BlockPassthroughData {
     pub per_shard_states: [PerShardState; NUM_SHARDS],
 }
 
+#[derive(Debug)]
 pub struct BlockMetaParameters {
     pub zkporter_is_available: bool,
     pub bootloader_code_hash: [u8; 32],
     pub default_aa_code_hash: [u8; 32],
 }
 
+#[derive(Debug)]
 pub struct BlockAuxilaryOutput {
     pub l1_messages_linear_hash: [u8; 32],
     pub rollup_state_diff_for_compression: [u8; 32],

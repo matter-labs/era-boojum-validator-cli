@@ -4,6 +4,7 @@ use circuit_definitions::circuit_definitions::recursion_layer::scheduler::Concre
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use requests::{AuxOutputWitnessWrapper, BatchL1Data};
 use serde::Deserialize;
 use std::io::Read;
 use std::{fs::File, process};
@@ -11,7 +12,7 @@ mod params;
 mod requests;
 mod snark_wrapper_verifier;
 
-use crate::snark_wrapper_verifier::verify_snark;
+use crate::snark_wrapper_verifier::{generate_solidity_test, verify_snark};
 pub mod block_header;
 
 use circuit_definitions::boojum::{
@@ -52,6 +53,7 @@ struct Cli {
 enum Commands {
     /// Verify the proof of the Snark wrapper (which is a wrapped FRI proof).
     VerifySnarkWrapper(VerifySnarkWrapperArgs),
+    GenerateSolidityTest(GenerateSolidityTestArgs),
 }
 
 #[derive(Parser, Debug)]
@@ -60,6 +62,12 @@ pub struct VerifySnarkWrapperArgs {
     l1_batch_proof_file: String,
     /// Snark verification scheduler key (like snark_verification_scheduler_key.json)
     snark_vk_scheduler_key_file: String,
+}
+
+#[derive(Parser, Debug)]
+pub struct GenerateSolidityTestArgs {
+    /// Path to the proof file (like l1_batch_proof_17.bin)
+    l1_batch_proof_file: String,
 }
 
 /// Reads proof (in FriProofWrapper format) from a given bin file.
@@ -153,7 +161,21 @@ pub async fn compute_public_inputs(
     // After fetching the data, we recreate the public input hash (for which we need information from current and previous block).
 
     let aux_data = aux_data.unwrap();
+    create_input_internal(
+        l1_data,
+        aux_data,
+        leaf_layer_parameters_commitment,
+        node_layer_vk_commitment,
+    )
+    .await
+}
 
+pub async fn create_input_internal(
+    l1_data: BatchL1Data,
+    aux_data: AuxOutputWitnessWrapper,
+    leaf_layer_parameters_commitment: [GoldilocksField; 4],
+    node_layer_vk_commitment: [GoldilocksField; 4],
+) -> anyhow::Result<Vec<GoldilocksField>> {
     // while we do not prove all the blocks we use placeholders for non-state related parts
     // of the previous block
     let previous_block_meta_hash = [0u8; 32];
@@ -250,6 +272,7 @@ pub async fn compute_public_inputs(
     flattened_public_input.extend(leaf_layer_parameters_hash);
 
     let input_keccak_hash = to_fixed_bytes(Keccak256::digest(&flattened_public_input).as_slice());
+
     let mut public_inputs = vec![];
     use circuit_definitions::boojum::field::PrimeField;
     use circuit_definitions::boojum::field::U64Representable;
@@ -274,9 +297,10 @@ async fn main() {
     if let Some(command) = opt.command {
         // Expert commands
         let result = match command {
-            Commands::VerifySnarkWrapper(args) => verify_snark(&args).await,
+            Commands::VerifySnarkWrapper(args) => verify_snark(&args).await.err(),
+            Commands::GenerateSolidityTest(args) => generate_solidity_test(&args).await.err(),
         };
-        if let Err(error) = result {
+        if let Some(error) = result {
             println!("Command failed: {}", error);
             process::exit(1);
         }
@@ -359,6 +383,12 @@ async fn main() {
 #[cfg(test)]
 
 mod test {
+    use crate::params::{to_goldilocks, CIRCUIT_V5};
+    use crate::proof_from_file;
+    use circuit_definitions::franklin_crypto::bellman::pairing::bn256::Fr;
+    use circuit_definitions::franklin_crypto::bellman::{Field, PrimeField};
+
+    use super::*;
     use circuit_definitions::{
         circuit_definitions::{
             base_layer::ZkSyncBaseLayerStorage,
@@ -367,11 +397,77 @@ mod test {
         },
         ZkSyncDefaultRoundFunction,
     };
-
-    use super::*;
+    use colored::Colorize;
     #[test]
     fn test_scheduler_proof() {
         verify_scheduler_proof("example_proofs/proof_52272951.bin", 52272951).expect("FAILED");
+    }
+
+    #[tokio::test]
+    async fn test_local_proof() {
+        let (public_input, aux_witness) = verify_snark(&VerifySnarkWrapperArgs {
+            l1_batch_proof_file: "example_proofs/snark_wrapper/l1_batch_proof_1.bin".to_string(),
+            snark_vk_scheduler_key_file:
+                "example_proofs/snark_wrapper/snark_verification_scheduler_key.json".to_string(),
+        })
+        .await
+        .unwrap();
+
+        let bootloader_code =
+            hex::decode("01000923e7c6e9e116c813f5e9b45eda88e3892d9150839bd6004c2df1846d46")
+                .unwrap();
+        let mut bootloader_code_array = [0u8; 32];
+        bootloader_code_array.copy_from_slice(&bootloader_code);
+
+        let default_aa_code =
+            hex::decode("0100067d70019d4919b5c8423df00fa89a5c53e734bccc1ad4a92e99df7474ab")
+                .unwrap();
+        let mut default_aa_array = [0u8; 32];
+        default_aa_array.copy_from_slice(&default_aa_code);
+
+        let prev_enum_counter = 23;
+        let prev_root =
+            hex::decode("38a3e641bf44aca21abf4cdfa2cac66cd1f222149e24105f6bfac98e0fc87503")
+                .unwrap();
+
+        let enum_counter = 83;
+        let root = hex::decode("0557c172fdfa63645c318a741c7c53b38a8fcf12421d8d4ce311e4e633dbcafb")
+            .unwrap();
+
+        let [leaf_layer_parameters_commitment, node_layer_vk_commitment] =
+            to_goldilocks(CIRCUIT_V5);
+        let l1_data = BatchL1Data {
+            previous_enumeration_counter: prev_enum_counter,
+            previous_root: prev_root,
+            new_enumeration_counter: enum_counter,
+            new_root: root,
+            default_aa_hash: default_aa_array,
+            bootloader_hash: bootloader_code_array,
+        };
+
+        println!("proof input: {:?}", public_input);
+
+        let result = create_input_internal(
+            l1_data,
+            aux_witness,
+            leaf_layer_parameters_commitment,
+            node_layer_vk_commitment,
+        )
+        .await;
+        println!("computed proof input: {:?}", result);
+
+        let r = result.unwrap();
+        let mut recomputed_input = Fr::zero();
+        // Right now we go in reverse order, but it might be changed soon.
+        for i in (0..4).rev() {
+            // 56 - as we only push 7 bytes.
+            for _ in 0..56 {
+                recomputed_input.double();
+            }
+            recomputed_input.add_assign(&Fr::from_str(&format!("{}", r[i].0)).unwrap());
+        }
+
+        assert_eq!(recomputed_input, public_input, "Public input doesn't match");
     }
     #[test]
 
