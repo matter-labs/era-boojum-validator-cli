@@ -1,4 +1,6 @@
+use ethers::{abi::Function, utils::keccak256};
 use sha3::{Digest, Keccak256};
+use zksync_types::{l2_to_l1_log::L2ToL1Log, commitment::SerializeCommitment, H256};
 
 pub struct PerShardState {
     pub enumeration_counter: u64,
@@ -20,10 +22,10 @@ pub struct BlockMetaParameters {
 
 #[derive(Debug)]
 pub struct BlockAuxilaryOutput {
-    pub l1_messages_linear_hash: [u8; 32],
-    pub rollup_state_diff_for_compression: [u8; 32],
-    pub bootloader_heap_initial_content: [u8; 32],
-    pub events_queue_state: [u8; 32],
+    pub system_logs_hash: [u8; 32],
+    pub state_diff_hash: [u8; 32],
+    pub bootloader_heap_initial_content_hash: [u8; 32],
+    pub event_queue_state_hash: [u8; 32],
 }
 
 impl PerShardState {
@@ -66,12 +68,75 @@ impl BlockAuxilaryOutput {
     pub fn into_flattened_bytes(&self) -> Vec<u8> {
         // everything is BE
         let mut result = vec![];
-        result.extend_from_slice(&self.l1_messages_linear_hash);
-        result.extend_from_slice(&self.rollup_state_diff_for_compression);
-        result.extend_from_slice(&self.bootloader_heap_initial_content);
-        result.extend_from_slice(&self.events_queue_state);
+        result.extend_from_slice(&self.system_logs_hash);
+        result.extend_from_slice(&self.state_diff_hash);
+        result.extend_from_slice(&self.bootloader_heap_initial_content_hash);
+        result.extend_from_slice(&self.event_queue_state_hash);
 
         result
+    }
+
+    pub fn prepare_aggregation_result_coords(&self) -> [[u8; 32]; 4] {
+        [
+            self.system_logs_hash,
+            self.state_diff_hash,
+            self.bootloader_heap_initial_content_hash,
+            self.event_queue_state_hash
+        ]
+    }
+}
+
+pub fn parse_aux_data(func: &Function, calldata: &[u8]) -> BlockAuxilaryOutput {
+    use ethers::abi;
+
+    let mut parsed_calldata = func.decode_input(&calldata[4..]).unwrap();
+    assert_eq!(parsed_calldata.len(), 2);
+
+    let committed_batch = parsed_calldata.pop().unwrap();
+
+    let abi::Token::Tuple(committed_batch) = committed_batch else {
+        panic!();
+    };
+
+    let [
+        abi::Token::Uint(_batch_number),
+        abi::Token::Uint(_timestamp),
+        abi::Token::Uint(_index_repeated_storage_changes),
+        abi::Token::FixedBytes(_new_state_root),
+        abi::Token::Uint(_number_l1_txns),
+        abi::Token::FixedBytes(bootloader_contents_hash),
+        abi::Token::FixedBytes(event_queue_state_hash),
+        abi::Token::Bytes(sys_logs),
+        abi::Token::Bytes(_total_pubdata)
+    ] = committed_batch.as_slice() else {
+        panic!();
+    };
+
+    assert_eq!(bootloader_contents_hash.len(), 32);
+    assert_eq!(event_queue_state_hash.len(), 32);
+
+    let mut bootloader_contents_hash_buffer = [0u8; 32];
+    bootloader_contents_hash_buffer.copy_from_slice(bootloader_contents_hash);
+
+    let mut event_queue_state_hash_buffer = [0u8; 32];
+    event_queue_state_hash_buffer.copy_from_slice(event_queue_state_hash);
+
+    assert!(sys_logs.len() % L2ToL1Log::SERIALIZED_SIZE == 0);
+    let state_diff_hash_sys_log = sys_logs.chunks(L2ToL1Log::SERIALIZED_SIZE)
+        .into_iter()
+        .map(L2ToL1Log::from_slice)
+        .find(|log| {
+            log.key == H256::from_low_u64_be(2u64)
+        })
+        .unwrap();
+
+    let system_logs_hash = keccak256(sys_logs);
+
+    BlockAuxilaryOutput {
+        system_logs_hash,
+        state_diff_hash: state_diff_hash_sys_log.value.to_fixed_bytes(),
+        bootloader_heap_initial_content_hash: bootloader_contents_hash_buffer,
+        event_queue_state_hash: event_queue_state_hash_buffer,
     }
 }
 
@@ -132,4 +197,10 @@ impl BlockContentHeader {
 
         block_header_hash
     }
+}
+
+pub struct VerifierParams {
+    pub recursion_node_level_vk_hash: [u8; 32],
+    pub recursion_leaf_level_vk_hash: [u8; 32],
+    pub recursion_circuits_set_vk_hash: [u8; 32],
 }
