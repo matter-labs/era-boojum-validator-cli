@@ -175,7 +175,7 @@ async fn main() {
             verifier_params,
         } = requests::fetch_l1_data(batch_number, &network, &l1_rpc.clone().unwrap()).await;
 
-        let snark_vk_scheduler_key_file = "keys/new_snark_scheduler_key.json";
+        let snark_vk_scheduler_key_file = "keys/v5_snark_verification_scheduler_key.json";
 
         let mut batch_proof = L1BatchProofForL1 {
             aggregation_result_coords: aux_output.prepare_aggregation_result_coords(),
