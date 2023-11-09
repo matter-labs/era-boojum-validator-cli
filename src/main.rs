@@ -2,20 +2,21 @@
 #![feature(slice_flatten)]
 
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
-use circuit_definitions::franklin_crypto::bellman::{Field, PrimeField};
 use circuit_definitions::franklin_crypto::bellman::pairing::bn256::Fr;
+use circuit_definitions::franklin_crypto::bellman::{Field, PrimeField};
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use serde::Deserialize;
-use std::io::Read;
+use std::env;
+use std::io::{self, Read};
 use std::{fs::File, process};
 
 mod crypto;
+mod inputs;
 mod params;
 mod requests;
 mod snark_wrapper_verifier;
-mod inputs;
 
 use crate::inputs::{compute_public_inputs, generate_inputs};
 use crate::requests::L1BatchAndProofData;
@@ -35,6 +36,8 @@ use circuit_definitions::circuit_definitions::{
     recursion_layer::{ZkSyncRecursionLayerProof, ZkSyncRecursionLayerStorage},
 };
 
+const VERIFICATION_KEY_FILE_GITHUB: &str = "https://raw.githubusercontent.com/matter-labs/era-contracts/main/tools/data/scheduler_key.json";
+
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub enum FriProofWrapper {
     Base(ZkSyncBaseLayerProof),
@@ -53,6 +56,9 @@ struct Cli {
     #[arg(long)]
     // RPC endpoint to use to fetch L1 information
     l1_rpc: Option<String>,
+    // Bool to request updating verification key
+    #[arg(long)]
+    update_verification_key: Option<bool>,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -157,6 +163,24 @@ async fn main() {
         return;
     }
 
+    let file_path = "src/keys/scheduler_key.json";
+    let file = env::current_dir().unwrap().join(file_path);
+    println!("{:?}", file);
+    let file_exists = file.exists();
+
+    let should_update =
+        opt.update_verification_key.is_some() && opt.update_verification_key.unwrap();
+
+    if file_exists && !should_update {
+        println!("verifiction key exists")
+    } else {
+        println!("verifiction key does not exist or update requested, downloading...");
+        let resp = reqwest::get(VERIFICATION_KEY_FILE_GITHUB).await.expect("request failed");
+        let body = resp.text().await.expect("body invalid");
+        let mut out = File::create(file_path).expect("failed to create file");
+        io::copy(&mut body.as_bytes(), &mut out).expect("failed to copy content");
+    }
+
     println!("{}", "Fetching and validating the proof itself".on_blue());
     if l1_rpc.is_none() {
         println!(
@@ -175,7 +199,7 @@ async fn main() {
             verifier_params,
         } = requests::fetch_l1_data(batch_number, &network, &l1_rpc.clone().unwrap()).await;
 
-        let snark_vk_scheduler_key_file = "keys/v5_snark_verification_scheduler_key.json";
+        let snark_vk_scheduler_key_file = "keys/scheduler_key.json";
 
         let mut batch_proof = L1BatchProofForL1 {
             aggregation_result_coords: aux_output.prepare_aggregation_result_coords(),
