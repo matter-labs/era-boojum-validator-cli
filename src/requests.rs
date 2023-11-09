@@ -218,7 +218,10 @@ pub async fn fetch_l1_commit_data(
             .map(|log| log.topics[3]);
 
         if batch_commitment.is_none() {
-            panic!("failed to get batch commitment for batch {}", &b_number.to_string())
+            panic!(
+                "failed to get batch commitment for batch {}",
+                &b_number.to_string()
+            )
         }
 
         if b_number == previous_batch_number {

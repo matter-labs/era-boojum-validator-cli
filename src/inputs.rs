@@ -1,16 +1,16 @@
 use std::ops::Shr;
 
-use circuit_definitions::franklin_crypto::bellman::PrimeField;
 use circuit_definitions::franklin_crypto::bellman::pairing::bn256::Fr;
+use circuit_definitions::franklin_crypto::bellman::PrimeField;
 
-use colored::Colorize;
-use zksync_types::U256;
-use crate::block_header::VerifierParams;
-use crate::requests;
-use crate::params;
 use crate::block_header;
+use crate::block_header::VerifierParams;
+use crate::params;
+use crate::requests;
 use crate::requests::AuxOutputWitnessWrapper;
 use crate::requests::BatchL1Data;
+use colored::Colorize;
+use zksync_types::U256;
 
 use circuit_definitions::boojum::field::goldilocks::GoldilocksField;
 
@@ -193,10 +193,7 @@ pub async fn create_input_internal(
     Ok(public_inputs)
 }
 
-pub fn generate_inputs(
-    batch_l1_data: BatchL1Data,
-    verifier_params: VerifierParams,
-) -> Vec<Fr> {
+pub fn generate_inputs(batch_l1_data: BatchL1Data, verifier_params: VerifierParams) -> Vec<Fr> {
     use self::block_header::*;
     use sha3::{Digest, Keccak256};
 
@@ -204,7 +201,7 @@ pub fn generate_inputs(
         batch_l1_data.prev_batch_commitment.to_fixed_bytes(),
         batch_l1_data.curr_batch_commitment.to_fixed_bytes(),
         verifier_params.recursion_node_level_vk_hash,
-        verifier_params.recursion_leaf_level_vk_hash
+        verifier_params.recursion_leaf_level_vk_hash,
     ];
     let encoded_input_params = input_fields.flatten();
 
@@ -212,7 +209,5 @@ pub fn generate_inputs(
     let input_u256 = U256::from_big_endian(&input_keccak_hash);
     let shifted_input = input_u256.shr(U256::from(32));
 
-    vec![
-        Fr::from_str(&shifted_input.to_string()).unwrap()
-    ]
+    vec![Fr::from_str(&shifted_input.to_string()).unwrap()]
 }

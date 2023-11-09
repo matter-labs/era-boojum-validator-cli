@@ -30,7 +30,7 @@ pub async fn verify_snark(
 
     let mut proof = L1BatchProofForL1 {
         aggregation_result_coords: proof.aggregation_result_coords,
-        scheduler_proof: deserialize_proof(serialized_proof)
+        scheduler_proof: deserialize_proof(serialized_proof),
     };
 
     println!("=== Aux inputs:");

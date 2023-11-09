@@ -1,6 +1,6 @@
 use ethers::{abi::Function, utils::keccak256};
 use sha3::{Digest, Keccak256};
-use zksync_types::{l2_to_l1_log::L2ToL1Log, commitment::SerializeCommitment, H256};
+use zksync_types::{commitment::SerializeCommitment, l2_to_l1_log::L2ToL1Log, H256};
 
 pub struct PerShardState {
     pub enumeration_counter: u64,
@@ -81,7 +81,7 @@ impl BlockAuxilaryOutput {
             self.system_logs_hash,
             self.state_diff_hash,
             self.bootloader_heap_initial_content_hash,
-            self.event_queue_state_hash
+            self.event_queue_state_hash,
         ]
     }
 }
@@ -98,17 +98,9 @@ pub fn parse_aux_data(func: &Function, calldata: &[u8]) -> BlockAuxilaryOutput {
         panic!();
     };
 
-    let [
-        abi::Token::Uint(_batch_number),
-        abi::Token::Uint(_timestamp),
-        abi::Token::Uint(_index_repeated_storage_changes),
-        abi::Token::FixedBytes(_new_state_root),
-        abi::Token::Uint(_number_l1_txns),
-        abi::Token::FixedBytes(bootloader_contents_hash),
-        abi::Token::FixedBytes(event_queue_state_hash),
-        abi::Token::Bytes(sys_logs),
-        abi::Token::Bytes(_total_pubdata)
-    ] = committed_batch.as_slice() else {
+    let [abi::Token::Uint(_batch_number), abi::Token::Uint(_timestamp), abi::Token::Uint(_index_repeated_storage_changes), abi::Token::FixedBytes(_new_state_root), abi::Token::Uint(_number_l1_txns), abi::Token::FixedBytes(bootloader_contents_hash), abi::Token::FixedBytes(event_queue_state_hash), abi::Token::Bytes(sys_logs), abi::Token::Bytes(_total_pubdata)] =
+        committed_batch.as_slice()
+    else {
         panic!();
     };
 
@@ -122,12 +114,11 @@ pub fn parse_aux_data(func: &Function, calldata: &[u8]) -> BlockAuxilaryOutput {
     event_queue_state_hash_buffer.copy_from_slice(event_queue_state_hash);
 
     assert!(sys_logs.len() % L2ToL1Log::SERIALIZED_SIZE == 0);
-    let state_diff_hash_sys_log = sys_logs.chunks(L2ToL1Log::SERIALIZED_SIZE)
+    let state_diff_hash_sys_log = sys_logs
+        .chunks(L2ToL1Log::SERIALIZED_SIZE)
         .into_iter()
         .map(L2ToL1Log::from_slice)
-        .find(|log| {
-            log.key == H256::from_low_u64_be(2u64)
-        })
+        .find(|log| log.key == H256::from_low_u64_be(2u64))
         .unwrap();
 
     let system_logs_hash = keccak256(sys_logs);

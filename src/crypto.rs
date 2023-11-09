@@ -1,6 +1,6 @@
-use circuit_definitions::franklin_crypto::bellman::PrimeFieldRepr;
 use circuit_definitions::franklin_crypto::bellman::compact_bn256::Fr;
 use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use circuit_definitions::franklin_crypto::bellman::PrimeFieldRepr;
 use circuit_definitions::{
     circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit,
     ethereum_types::U256,
@@ -152,9 +152,7 @@ pub fn deserialize_proof(mut proof: Vec<U256>) -> Proof<Bn256, ZkSyncSnarkWrappe
     proof
 }
 
-fn serialize_g1_for_ethereum(
-    point: &<bn256::Bn256 as Engine>::G1Affine
-) -> (U256, U256) {
+fn serialize_g1_for_ethereum(point: &<bn256::Bn256 as Engine>::G1Affine) -> (U256, U256) {
     if <<bn256::Bn256 as Engine>::G1Affine as CurveAffine>::is_zero(point) {
         return (U256::zero(), U256::zero());
     }
@@ -236,16 +234,31 @@ pub fn serialize_proof(proof: &Proof<Bn256, ZkSyncSnarkWrapperCircuit>) -> (Vec<
         serialized_proof.push(serialize_fe_for_ethereum(&c));
     }
 
-    serialized_proof.push(serialize_fe_for_ethereum(&proof.copy_permutation_grand_product_opening_at_z_omega));
-    serialized_proof.push(serialize_fe_for_ethereum(&proof.lookup_s_poly_opening_at_z_omega.unwrap()));
-    serialized_proof.push(serialize_fe_for_ethereum(&proof.lookup_grand_product_opening_at_z_omega.unwrap()));
-    serialized_proof.push(serialize_fe_for_ethereum(&proof.lookup_t_poly_opening_at_z.unwrap()));
-    serialized_proof.push(serialize_fe_for_ethereum(&proof.lookup_t_poly_opening_at_z_omega.unwrap()));
-    serialized_proof.push(serialize_fe_for_ethereum(&proof.lookup_selector_poly_opening_at_z.unwrap()));
-    serialized_proof.push(serialize_fe_for_ethereum(&proof.lookup_table_type_poly_opening_at_z.unwrap()));
+    serialized_proof.push(serialize_fe_for_ethereum(
+        &proof.copy_permutation_grand_product_opening_at_z_omega,
+    ));
+    serialized_proof.push(serialize_fe_for_ethereum(
+        &proof.lookup_s_poly_opening_at_z_omega.unwrap(),
+    ));
+    serialized_proof.push(serialize_fe_for_ethereum(
+        &proof.lookup_grand_product_opening_at_z_omega.unwrap(),
+    ));
+    serialized_proof.push(serialize_fe_for_ethereum(
+        &proof.lookup_t_poly_opening_at_z.unwrap(),
+    ));
+    serialized_proof.push(serialize_fe_for_ethereum(
+        &proof.lookup_t_poly_opening_at_z_omega.unwrap(),
+    ));
+    serialized_proof.push(serialize_fe_for_ethereum(
+        &proof.lookup_selector_poly_opening_at_z.unwrap(),
+    ));
+    serialized_proof.push(serialize_fe_for_ethereum(
+        &proof.lookup_table_type_poly_opening_at_z.unwrap(),
+    ));
     serialized_proof.push(serialize_fe_for_ethereum(&proof.quotient_poly_opening_at_z));
-    serialized_proof.push(serialize_fe_for_ethereum(&proof.linearization_poly_opening_at_z));
-
+    serialized_proof.push(serialize_fe_for_ethereum(
+        &proof.linearization_poly_opening_at_z,
+    ));
 
     let (x, y) = serialize_g1_for_ethereum(&proof.opening_proof_at_z);
     serialized_proof.push(x);
