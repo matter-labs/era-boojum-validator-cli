@@ -1,6 +1,6 @@
 use colored::Colorize;
 use ethers::prelude::*;
-use std::str::FromStr;
+use std::{str::FromStr, env};
 
 pub struct ContractConfig {
     pub provider: Provider<Http>,
@@ -20,6 +20,8 @@ impl ContractConfig {
                 "testnet".yellow()
             );
         }
+
+        println!("{:?}", env::current_dir().unwrap());
 
         let provider =
             Provider::<Http>::try_from(l1_rpc_url).expect("Failed to connect to provider");
