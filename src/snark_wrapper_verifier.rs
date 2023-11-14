@@ -230,10 +230,10 @@ fn check_verification_key(
     let lookup_table = verification_key.lookup_table_type_commitment.unwrap();
     let (x, y) = lookup_table.as_xy();
     x.into_repr().write_be(&mut res).unwrap();
-    // y.into_repr().write_be(&mut res).unwrap();
+    y.into_repr().write_be(&mut res).unwrap();
 
     // flag for using recursive part
-    // Fq::default().into_repr().write_be(&mut res).unwrap();
+    Fq::default().into_repr().write_be(&mut res).unwrap();
     
     let mut hasher = Keccak256::new();
     hasher.update(&res);
