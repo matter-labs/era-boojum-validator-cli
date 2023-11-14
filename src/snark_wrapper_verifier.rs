@@ -241,7 +241,7 @@ fn check_verification_key(
 
     let computed_vk_hash = H256::from_slice(&computed_vk_hash);
 
-    println!("=== Verification Key Hash Verification:");
+    println!("=== Verification Key Hash Check:");
     println!("  Verification Key Hash from L1:       0x{:}", hex::encode(vk_hash_from_l1));
     println!("  Computed Verification Key Hash:      0x{:}", hex::encode(computed_vk_hash));
 
