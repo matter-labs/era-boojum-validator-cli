@@ -9,7 +9,6 @@ use serde::Deserialize;
 use std::io::Read;
 use std::{fs::File, process};
 
-pub mod crypto;
 mod contract;
 mod inputs;
 mod params;

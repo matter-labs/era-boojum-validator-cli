@@ -1,6 +1,5 @@
 use std::fs;
 
-use crate::crypto::{deserialize_proof, serialize_proof, calculate_verification_key_hash};
 use crate::requests::AuxOutputWitnessWrapper;
 use crate::{proof_from_file, GenerateSolidityTestArgs, VerifySnarkWrapperArgs};
 use circuit_definitions::franklin_crypto::bellman::pairing::bn256::{Bn256, Fr};
@@ -11,6 +10,7 @@ use circuit_definitions::{
 };
 use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
 use colored::Colorize;
+use crypto::{serialize_proof, deserialize_proof, calculate_verification_key_hash};
 use primitive_types::H256;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]

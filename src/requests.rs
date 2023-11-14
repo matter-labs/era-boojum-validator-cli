@@ -2,6 +2,7 @@ use circuit_definitions::boojum::field::goldilocks::GoldilocksField;
 use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
 use circuit_definitions::franklin_crypto::bellman::bn256::Bn256;
 use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use crypto::deserialize_proof;
 use ethers::abi::Function;
 use once_cell::sync::Lazy;
 use std::fs;
@@ -10,7 +11,6 @@ use zksync_types::{ethabi, H256};
 
 use crate::block_header::{self, BlockAuxilaryOutput, VerifierParams};
 use crate::contract::get_diamond_proxy_address;
-use crate::crypto::deserialize_proof;
 use crate::snark_wrapper_verifier::L1BatchProofForL1;
 
 pub static BLOCK_COMMIT_EVENT_SIGNATURE: Lazy<H256> = Lazy::new(|| {

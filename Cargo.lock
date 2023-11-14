@@ -1246,6 +1246,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 
 [[package]]
+name = "crypto"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "circuit_definitions",
+ "clap 4.3.12",
+ "codegen 0.1.0 (git+https://github.com/matter-labs/solidity_plonk_verifier.git?branch=snark_wrapper)",
+ "colored",
+ "ethers",
+ "hex",
+ "once_cell",
+ "primitive-types 0.12.2",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha3 0.9.1",
+ "tokio",
+ "zksync_types",
+]
+
+[[package]]
 name = "crypto-bigint"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1586,6 +1608,7 @@ dependencies = [
  "clap 4.3.12",
  "codegen 0.1.0 (git+https://github.com/matter-labs/solidity_plonk_verifier.git?branch=snark_wrapper)",
  "colored",
+ "crypto",
  "ethers",
  "hex",
  "once_cell",
