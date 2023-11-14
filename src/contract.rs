@@ -28,11 +28,7 @@ impl ContractConfig {
             Abi::load(&include_bytes!("../abis/IZKSync.json")[..]).unwrap();
         let verifier_abi: Abi = Abi::load(&include_bytes!("../abis/IVerifier.json")[..]).unwrap();
 
-        let diamond_proxy_address = if network.to_string() == "mainnet" {
-            Address::from_str("32400084c286cf3e17e7b677ea9583e60a000324").unwrap()
-        } else {
-            Address::from_str("74fba6cca06eed111e03719d6bfa26ae7680b3ea").unwrap()
-        };
+        let diamond_proxy_address = get_diamond_proxy_address(network);
 
         let diamond_proxy_contract = diamond_proxy_abi.into();
         let verifier_contract = verifier_abi.into();
