@@ -195,11 +195,15 @@ async fn main() {
         batch_proof.scheduler_proof.inputs = inputs;
 
         // First, we verify that the proof itself is valid.
-        verify_snark_from_l1(snark_vk_scheduler_key_file.to_string(), batch_proof, vk_hash)
-            .await
-            .unwrap();
+        verify_snark_from_l1(
+            snark_vk_scheduler_key_file.to_string(),
+            batch_proof,
+            vk_hash,
+        )
+        .await
+        .unwrap();
 
-        println!("\n");    
+        println!("\n");
     };
 
     println!("\n");
@@ -212,8 +216,8 @@ mod test {
     use crate::params::{to_goldilocks, CIRCUIT_V5};
     use crate::proof_from_file;
     use crate::requests::BatchL1Data;
-    use circuit_definitions::franklin_crypto::bellman::pairing::bn256::Fr;
-    use circuit_definitions::franklin_crypto::bellman::{Field, PrimeField};
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::pairing::bn256::Fr;
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::{Field, PrimeField};
     use zksync_types::H256;
 
     use super::*;

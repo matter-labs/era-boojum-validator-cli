@@ -1,7 +1,7 @@
 use std::ops::Shr;
 
-use circuit_definitions::franklin_crypto::bellman::pairing::bn256::Fr;
-use circuit_definitions::franklin_crypto::bellman::PrimeField;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::pairing::bn256::Fr;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::PrimeField;
 
 use crate::block_header;
 use crate::block_header::VerifierParams;

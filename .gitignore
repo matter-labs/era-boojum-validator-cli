@@ -1,4 +1,5 @@
 /target
+/crypto/target
 /downloaded_data/*
 !downloaded_data/.gitkeep 
 .DS_Store

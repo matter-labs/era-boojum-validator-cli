@@ -1,7 +1,7 @@
 use circuit_definitions::boojum::field::goldilocks::GoldilocksField;
 use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
-use circuit_definitions::franklin_crypto::bellman::bn256::Bn256;
-use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::bn256::Bn256;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
 use crypto::deserialize_proof;
 use ethers::abi::Function;
 use once_cell::sync::Lazy;
@@ -127,7 +127,7 @@ pub struct L1BatchAndProofData {
     pub aux_output: BlockAuxilaryOutput,
     pub scheduler_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit>,
     pub verifier_params: VerifierParams,
-    pub block_number: u64
+    pub block_number: u64,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]

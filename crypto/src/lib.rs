@@ -1,11 +1,11 @@
-use circuit_definitions::franklin_crypto::bellman::compact_bn256::{Fq, Fr};
-use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::cs::Circuit;
-use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
-use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
-use circuit_definitions::franklin_crypto::bellman::PrimeFieldRepr;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::compact_bn256::{Fq, Fr};
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::cs::Circuit;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::PrimeFieldRepr;
 use circuit_definitions::{
     ethereum_types::U256,
-    franklin_crypto::bellman::{
+    snark_wrapper::franklin_crypto::bellman::{
         bn256::{self, Bn256},
         CurveAffine, Engine, PrimeField,
     },

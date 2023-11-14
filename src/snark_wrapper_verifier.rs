@@ -2,15 +2,15 @@ use std::fs;
 
 use crate::requests::AuxOutputWitnessWrapper;
 use crate::{proof_from_file, GenerateSolidityTestArgs, VerifySnarkWrapperArgs};
-use circuit_definitions::franklin_crypto::bellman::pairing::bn256::{Bn256, Fr};
-use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::pairing::bn256::{Bn256, Fr};
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
 use circuit_definitions::{
     circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit,
-    franklin_crypto::bellman::plonk::commitments::transcript::keccak_transcript::RollingKeccakTranscript,
+    snark_wrapper::franklin_crypto::bellman::plonk::commitments::transcript::keccak_transcript::RollingKeccakTranscript,
 };
-use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
 use colored::Colorize;
-use crypto::{serialize_proof, deserialize_proof, calculate_verification_key_hash};
+use crypto::{calculate_verification_key_hash, deserialize_proof, serialize_proof};
 use primitive_types::H256;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -54,9 +54,11 @@ pub async fn verify_snark(
     );
 
     println!("=== Loading verification key.");
-    use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
-    let vk_inner : VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> =
-        serde_json::from_str(&fs::read_to_string(args.snark_vk_scheduler_key_file.clone()).unwrap()).unwrap();
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
+    let vk_inner: VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> = serde_json::from_str(
+        &fs::read_to_string(args.snark_vk_scheduler_key_file.clone()).unwrap(),
+    )
+    .unwrap();
 
     proof.scheduler_proof.n = vk_inner.n;
     proof.scheduler_proof.inputs = input;
@@ -136,8 +138,8 @@ pub async fn verify_snark_from_l1(
     );
 
     println!("=== Loading verification key.");
-    use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
-    let vk_inner : circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> =
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
+    let vk_inner : circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> =
         serde_json::from_str(&fs::read_to_string(snark_vk_scheduler_key_file.clone()).unwrap()).unwrap();
 
     proof.scheduler_proof.n = vk_inner.n;
@@ -182,8 +184,17 @@ fn check_verification_key(
     let computed_vk_hash = calculate_verification_key_hash(verification_key);
 
     println!("=== Verification Key Hash Check:");
-    println!("  Verification Key Hash from L1:       0x{:}", hex::encode(vk_hash_from_l1));
-    println!("  Computed Verification Key Hash:      0x{:}", hex::encode(computed_vk_hash));
+    println!(
+        "  Verification Key Hash from L1:       0x{:}",
+        hex::encode(vk_hash_from_l1)
+    );
+    println!(
+        "  Computed Verification Key Hash:      0x{:}",
+        hex::encode(computed_vk_hash)
+    );
 
-    assert_eq!(computed_vk_hash, vk_hash_from_l1, "Make sure the verification key is updated.");
+    assert_eq!(
+        computed_vk_hash, vk_hash_from_l1,
+        "Make sure the verification key is updated."
+    );
 }
