@@ -1,12 +1,14 @@
 use circuit_definitions::boojum::field::goldilocks::GoldilocksField;
 use circuit_definitions::boojum::field::U64Representable;
 
+#[allow(dead_code)]
 pub struct ParametersRangeHolder<T: 'static + Clone> {
     pub historical: Vec<(std::ops::Range<usize>, T)>,
     pub current: (usize, T),
 }
 
 impl<T: 'static + Clone> ParametersRangeHolder<T> {
+    #[allow(dead_code)]
     pub fn get_for_index(&self, index: usize) -> Option<T> {
         if index >= self.current.0 {
             return Some(self.current.1.clone());
@@ -24,6 +26,7 @@ impl<T: 'static + Clone> ParametersRangeHolder<T> {
 
 // These CIRCUIT_XX objects contain the commitment to the verification key for Leaf and Node circuits.
 // The Scheduler circuit verification key is separate (and currently hardcoded in keys/verification_scheduler_key.json file).
+#[allow(dead_code)]
 const CIRCUIT_V1: [[u64; 4]; 2] = [
     [
         0xb4338bf5dd05f4bc,
@@ -39,6 +42,7 @@ const CIRCUIT_V1: [[u64; 4]; 2] = [
     ],
 ];
 
+#[allow(dead_code)]
 const CIRCUIT_V2: [[u64; 4]; 2] = [
     [
         0x4f07753d1ab098f9,
@@ -54,6 +58,7 @@ const CIRCUIT_V2: [[u64; 4]; 2] = [
     ],
 ];
 
+#[allow(dead_code)]
 const CIRCUIT_V3: [[u64; 4]; 2] = [
     [
         0x06babae433cab419,
@@ -69,6 +74,7 @@ const CIRCUIT_V3: [[u64; 4]; 2] = [
     ],
 ];
 
+#[allow(dead_code)]
 const CIRCUIT_V4: [[u64; 4]; 2] = [
     [
         0x924fff6035db1447,
@@ -84,6 +90,7 @@ const CIRCUIT_V4: [[u64; 4]; 2] = [
     ],
 ];
 
+#[allow(dead_code)]
 pub const CIRCUIT_V5: [[u64; 4]; 2] = [
     [
         0x72167c43a46cf388,
@@ -99,13 +106,16 @@ pub const CIRCUIT_V5: [[u64; 4]; 2] = [
     ],
 ];
 
+#[allow(dead_code)]
 pub fn to_goldilocks(circuit: [[u64; 4]; 2]) -> [[GoldilocksField; 4]; 2] {
     circuit.map(|x| x.map(|y| GoldilocksField::from_u64_unchecked(y)))
 }
 
 /// Holds the Leaf and Node verification keys that were used in a given range of blocks.
+/// #[allow(dead_code)]
 pub type CommitsHolder = ParametersRangeHolder<[[GoldilocksField; 4]; 2]>;
 
+#[allow(dead_code)]
 pub fn get_mainnet_params_holder() -> CommitsHolder {
     ParametersRangeHolder {
         historical: vec![
@@ -123,9 +133,10 @@ pub fn get_mainnet_params_holder() -> CommitsHolder {
     }
 }
 
+#[allow(dead_code)]
 pub fn get_testnet_params_holder() -> CommitsHolder {
     ParametersRangeHolder {
-        historical: vec![(98767..120081, to_goldilocks(CIRCUIT_V1))],
-        current: (120081, to_goldilocks(CIRCUIT_V2)),
+        historical: vec![(0..1, to_goldilocks(CIRCUIT_V5))],
+        current: (1, to_goldilocks(CIRCUIT_V5)),
     }
 }

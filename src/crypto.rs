@@ -268,8 +268,6 @@ pub fn serialize_proof(proof: &Proof<Bn256, ZkSyncSnarkWrapperCircuit>) -> (Vec<
     serialized_proof.push(x);
     serialized_proof.push(y);
 
-    dbg!(&serialized_proof.len());
-
     (inputs, serialized_proof)
 }
 

@@ -23,14 +23,14 @@ pub static BLOCK_COMMIT_EVENT_SIGNATURE: Lazy<H256> = Lazy::new(|| {
     )
 });
 
+#[allow(dead_code)]
 pub enum StorageDataType {
-    #[allow(dead_code)]
     Proof,
     AuxData,
 }
 
 /// Fetches data from Google cloud and caches it locally.
-pub async fn fetch_data_from_storage(
+pub async fn _fetch_data_from_storage(
     data_type: StorageDataType,
     batch_number: u64,
     network: &str,
@@ -84,11 +84,11 @@ pub async fn _fetch_proof_from_storage(
         batch_number, network
     );
 
-    fetch_data_from_storage(StorageDataType::Proof, batch_number, network).await
+    _fetch_data_from_storage(StorageDataType::Proof, batch_number, network).await
 }
 
 /// Download the proof file if it exists and saves locally
-pub async fn fetch_aux_data_from_storage(
+pub async fn _fetch_aux_data_from_storage(
     batch_number: u64,
     network: &str,
 ) -> Result<AuxOutputWitnessWrapper, Box<dyn std::error::Error>> {
@@ -97,7 +97,7 @@ pub async fn fetch_aux_data_from_storage(
         batch_number, network
     );
 
-    let aux_path = fetch_data_from_storage(StorageDataType::AuxData, batch_number, network).await;
+    let aux_path = _fetch_data_from_storage(StorageDataType::AuxData, batch_number, network).await;
 
     let bytes = std::fs::read(aux_path.unwrap())?;
 
@@ -126,6 +126,7 @@ pub struct L1BatchAndProofData {
     pub aux_output: BlockAuxilaryOutput,
     pub scheduler_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit>,
     pub verifier_params: VerifierParams,
+    pub block_number: u64
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -151,6 +152,7 @@ pub async fn fetch_l1_data(batch_number: u64, network: &str, rpc_url: &str) -> L
         aux_output,
         scheduler_proof: proof_data.scheduler_proof,
         verifier_params,
+        block_number,
     }
 }
 
@@ -168,13 +170,13 @@ pub async fn fetch_l1_commit_data(
     let DIAMOND_PROXY = if network.to_string() == "mainnet" {
         "32400084c286cf3e17e7b677ea9583e60a000324"
     } else {
-        "ae31d7109bbca90b8faf0530d2990d8dbed0e502"
+        "74fba6cca06eed111e03719d6bfa26ae7680b3ea"
     };
 
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
-    let function: Function = contract_abi.functions_by_name("commitBlocks").unwrap()[0].clone();
+    let function: Function = contract_abi.functions_by_name("commitBatches").unwrap()[0].clone();
     let previous_batch_number = batch_number - 1;
     let address = Address::from_str(DIAMOND_PROXY).unwrap();
 
@@ -295,7 +297,7 @@ pub async fn fetch_proof_from_l1(
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
-    let function = contract_abi.functions_by_name("proveBlocks").unwrap()[0].clone();
+    let function = contract_abi.functions_by_name("proveBatches").unwrap()[0].clone();
 
     let (_, prove_tx) = fetch_batch_commit_tx(batch_number, network)
         .await
@@ -347,8 +349,6 @@ pub async fn fetch_proof_from_l1(
         .collect::<Vec<U256>>();
 
     let x: Proof<Bn256, ZkSyncSnarkWrapperCircuit> = deserialize_proof(proof);
-    println!("{:?}", x);
-
     (
         L1BatchProofForL1 {
             aggregation_result_coords: [[0u8; 32]; 4],
@@ -490,7 +490,7 @@ async fn fetch_verifier_param_from_l1(
     let DIAMOND_PROXY = if network.to_string() == "mainnet" {
         Address::from_str("32400084c286cf3e17e7b677ea9583e60a000324").unwrap()
     } else {
-        Address::from_str("ae31d7109bbca90b8faf0530d2990d8dbed0e502").unwrap()
+        Address::from_str("74fba6cca06eed111e03719d6bfa26ae7680b3ea").unwrap()
     };
 
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");

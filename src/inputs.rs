@@ -16,7 +16,7 @@ use circuit_definitions::boojum::field::goldilocks::GoldilocksField;
 
 /// Computes the public inputs for a given batch in a given network.
 /// Public inputs require us to fetch multiple data from the l1 (like state hash etc).
-pub async fn compute_public_inputs(
+pub async fn _compute_public_inputs(
     network: String,
     batch_number: u64,
     l1_rpc: Option<String>,
@@ -25,7 +25,7 @@ pub async fn compute_public_inputs(
     // As our circuits change, the verification keys also change - so depending on the batch number, they might have different values.
     let params = if network == "mainnet" {
         self::params::get_mainnet_params_holder().get_for_index(batch_number as usize)
-    } else if network == "testnet" {
+    } else if network == "sepolia" {
         self::params::get_testnet_params_holder().get_for_index(batch_number as usize)
     } else {
         unreachable!();
@@ -50,7 +50,7 @@ pub async fn compute_public_inputs(
     let (l1_data, _) = l1_data.unwrap();
 
     println!("{}", "Fetching auxilary block data".on_blue());
-    let aux_data = requests::fetch_aux_data_from_storage(batch_number, &network).await;
+    let aux_data = requests::_fetch_aux_data_from_storage(batch_number, &network).await;
     if aux_data.is_err() {
         anyhow::bail!("Failed to get auxiliary data");
     }
@@ -70,6 +70,7 @@ pub async fn compute_public_inputs(
     .await
 }
 
+#[allow(dead_code)]
 pub async fn create_input_internal(
     l1_data: BatchL1Data,
     aux_data: AuxOutputWitnessWrapper,

@@ -94,13 +94,26 @@ pub fn parse_aux_data(func: &Function, calldata: &[u8]) -> BlockAuxilaryOutput {
 
     let committed_batch = parsed_calldata.pop().unwrap();
 
-    let abi::Token::Tuple(committed_batch) = committed_batch else {
+    let abi::Token::Array(committed_batch) = committed_batch else {
         panic!();
     };
 
-    let [abi::Token::Uint(_batch_number), abi::Token::Uint(_timestamp), abi::Token::Uint(_index_repeated_storage_changes), abi::Token::FixedBytes(_new_state_root), abi::Token::Uint(_number_l1_txns), abi::Token::FixedBytes(bootloader_contents_hash), abi::Token::FixedBytes(event_queue_state_hash), abi::Token::Bytes(sys_logs), abi::Token::Bytes(_total_pubdata)] =
-        committed_batch.as_slice()
-    else {
+    let abi::Token::Tuple(committed_batch) = committed_batch[0].clone() else {
+        panic!();
+    };
+
+    let [
+        abi::Token::Uint(_batch_number), 
+        abi::Token::Uint(_timestamp), 
+        abi::Token::Uint(_index_repeated_storage_changes), 
+        abi::Token::FixedBytes(_new_state_root), 
+        abi::Token::Uint(_number_l1_txns), 
+        abi::Token::FixedBytes(_priority_operations_hash), 
+        abi::Token::FixedBytes(bootloader_contents_hash), 
+        abi::Token::FixedBytes(event_queue_state_hash), 
+        abi::Token::Bytes(sys_logs), 
+        abi::Token::Bytes(_total_pubdata)
+    ] = committed_batch.as_slice() else {
         panic!();
     };
 

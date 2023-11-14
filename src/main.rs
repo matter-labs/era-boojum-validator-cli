@@ -2,14 +2,16 @@
 #![feature(slice_flatten)]
 
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
-use circuit_definitions::franklin_crypto::bellman::pairing::bn256::Fr;
-use circuit_definitions::franklin_crypto::bellman::{Field, PrimeField};
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use ethers::abi::Abi;
+use ethers::prelude::*;
+use ethers::providers::{Provider, Http};
 use serde::Deserialize;
 use std::env;
 use std::io::{self, Read};
+use std::str::FromStr;
 use std::{fs::File, process};
 
 mod crypto;
@@ -18,7 +20,7 @@ mod params;
 mod requests;
 mod snark_wrapper_verifier;
 
-use crate::inputs::{compute_public_inputs, generate_inputs};
+use crate::inputs::generate_inputs;
 use crate::requests::L1BatchAndProofData;
 use crate::snark_wrapper_verifier::{
     generate_solidity_test, verify_snark, verify_snark_from_l1, L1BatchProofForL1,
@@ -163,9 +165,16 @@ async fn main() {
         return;
     }
 
+    #[allow(non_snake_case)]
+    let DIAMOND_PROXY = if opt.network.clone().to_string() == "mainnet" {
+        "32400084c286cf3e17e7b677ea9583e60a000324"
+    } else {
+        "74fba6cca06eed111e03719d6bfa26ae7680b3ea"
+    };
+
+
     let file_path = "src/keys/scheduler_key.json";
     let file = env::current_dir().unwrap().join(file_path);
-    println!("{:?}", file);
     let file_exists = file.exists();
 
     let should_update =
@@ -197,9 +206,35 @@ async fn main() {
             scheduler_proof,
             batch_l1_data,
             verifier_params,
+            block_number,
         } = requests::fetch_l1_data(batch_number, &network, &l1_rpc.clone().unwrap()).await;
 
-        let snark_vk_scheduler_key_file = "keys/scheduler_key.json";
+        let address = Address::from_str(DIAMOND_PROXY).unwrap();
+        let client = Provider::<Http>::try_from(l1_rpc.clone().unwrap()).expect("Failed to connect to provider");
+        let diamond_contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZKSync.json")[..]).unwrap();
+        let verifier_contract_abi: Abi = Abi::load(&include_bytes!("../abis/Verifier.json")[..]).unwrap();
+        let diamond_base_contract: BaseContract = diamond_contract_abi.into();
+        let verifier_base_contract: BaseContract = verifier_contract_abi.into();
+        let diamond_contract_instance = diamond_base_contract.into_contract::<Provider<Http>>(address, client.clone());
+        
+        let verifier_address = diamond_contract_instance
+            .method::<_, Address>("getVerifier", ())
+            .unwrap()
+            .block(block_number)
+            .call()
+            .await
+            .unwrap();
+
+        let verifier_contract_instance = verifier_base_contract.into_contract::<Provider<Http>>(verifier_address, client);
+        let vk_hash = verifier_contract_instance
+            .method::<_, H256>("verificationKeyHash", ())
+            .unwrap()
+            .block(block_number)
+            .call()
+            .await
+            .unwrap();
+
+        let snark_vk_scheduler_key_file = "src/keys/scheduler_key.json";
 
         let mut batch_proof = L1BatchProofForL1 {
             aggregation_result_coords: aux_output.prepare_aggregation_result_coords(),
@@ -211,47 +246,12 @@ async fn main() {
         batch_proof.scheduler_proof.inputs = inputs;
 
         // First, we verify that the proof itself is valid.
-        let (public_input, _) =
-            verify_snark_from_l1(snark_vk_scheduler_key_file.to_string(), batch_proof)
-                .await
-                .unwrap();
-
-        println!("\n");
-
-        let public_inputs = compute_public_inputs(network, batch_number, l1_rpc)
+        verify_snark_from_l1(snark_vk_scheduler_key_file.to_string(), batch_proof, vk_hash)
             .await
             .unwrap();
 
-        let mut recomputed_input = Fr::zero();
-        // Right now we go in reverse order, but it might be changed soon.
-        for i in 0..4 {
-            // 56 - as we only push 7 bytes.
-            for _ in 0..56 {
-                recomputed_input.double();
-            }
-            recomputed_input.add_assign(&Fr::from_str(&format!("{}", public_inputs[i].0)).unwrap());
-        }
-
-        println!(
-            "{} ",
-            "Comparing public input from Ethereum with input for boojum".on_blue()
-        );
-        println!(
-            "Recomputed public input from current prover using L1 data is {}",
-            format!("{:?}", recomputed_input).bright_blue()
-        );
-        println!(
-            "Boojum proof's public input is {}",
-            format!("{:?}", public_input).green()
-        );
-
-        if recomputed_input == public_input {
-            println!("Boojum's proof is {}", "VALID".green());
-        } else {
-            println!("Boojum's proof is {}", "INVALID".red());
-        }
-        return;
-    }
+        println!("\n");    
+    };
 
     println!("\n");
 }

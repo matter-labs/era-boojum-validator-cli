@@ -3,13 +3,15 @@ use std::fs;
 use crate::crypto::{deserialize_proof, serialize_proof};
 use crate::requests::AuxOutputWitnessWrapper;
 use crate::{proof_from_file, GenerateSolidityTestArgs, VerifySnarkWrapperArgs};
-use circuit_definitions::franklin_crypto::bellman::pairing::bn256::{Bn256, Fr};
+use circuit_definitions::franklin_crypto::bellman::pairing::bn256::{Bn256, Fr, Fq};
 use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
 use circuit_definitions::{
     circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit,
     franklin_crypto::bellman::plonk::commitments::transcript::keccak_transcript::RollingKeccakTranscript,
 };
+use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
 use colored::Colorize;
+use primitive_types::H256;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct L1BatchProofForL1 {
@@ -71,7 +73,7 @@ pub async fn verify_snark(
         println!("Proof is {}", "VALID".green());
     };
 
-    // We expect only 1 private input.
+    // We expect only 1 public input.
     assert!(
         proof.scheduler_proof.inputs.len() == 1,
         "Expected exactly 1 public input in the proof"
@@ -79,7 +81,7 @@ pub async fn verify_snark(
 
     let public_input = proof.scheduler_proof.inputs[0];
 
-    println!("Private input is: {:?}", public_input);
+    println!("Public input is: {}", public_input);
     let aux_witness = AuxOutputWitnessWrapper {
         0 : circuit_definitions::zkevm_circuits::scheduler::block_header::BlockAuxilaryOutputWitness{
             l1_messages_linear_hash:proof.aggregation_result_coords[0],
@@ -111,6 +113,7 @@ pub async fn generate_solidity_test(args: &GenerateSolidityTestArgs) -> Result<(
 pub async fn verify_snark_from_l1(
     snark_vk_scheduler_key_file: String,
     mut proof: L1BatchProofForL1,
+    vk_hash_from_l1: H256,
 ) -> Result<(Fr, AuxOutputWitnessWrapper), String> {
     println!("Verifying SNARK wrapped FRI proof.");
 
@@ -139,6 +142,8 @@ pub async fn verify_snark_from_l1(
 
     proof.scheduler_proof.n = vk_inner.n;
 
+    check_verification_key(vk_inner.clone(), vk_hash_from_l1);
+
     println!("Verifying the proof");
     let is_valid =
         verify::<_, _, RollingKeccakTranscript<Fr>>(&vk_inner, &proof.scheduler_proof, None)
@@ -159,7 +164,7 @@ pub async fn verify_snark_from_l1(
 
     let public_input = proof.scheduler_proof.inputs[0];
 
-    println!("Private input is: {:?}", public_input);
+    println!("Public input is: {}", public_input);
     let aux_witness = AuxOutputWitnessWrapper {
         0 : circuit_definitions::zkevm_circuits::scheduler::block_header::BlockAuxilaryOutputWitness{
             l1_messages_linear_hash:proof.aggregation_result_coords[0],
@@ -168,4 +173,77 @@ pub async fn verify_snark_from_l1(
     };
 
     Ok((public_input, aux_witness))
+}
+
+fn check_verification_key(
+    verification_key: VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit>,
+    vk_hash_from_l1: H256,
+) {
+    use circuit_definitions::franklin_crypto::bellman::{CurveAffine, PrimeField, PrimeFieldRepr};
+    use sha3::{Digest, Keccak256};
+
+    let mut res = vec![];
+
+    // gate setup commitments
+    assert_eq!(8, verification_key.gate_setup_commitments.len());
+
+    for gate_setup in verification_key.gate_setup_commitments {
+        let (x, y) = gate_setup.as_xy();
+        x.into_repr().write_be(&mut res).unwrap();
+        y.into_repr().write_be(&mut res).unwrap();
+    }
+
+    // gate selectors commitments
+    assert_eq!(2, verification_key.gate_selectors_commitments.len());
+
+    for gate_selector in verification_key.gate_selectors_commitments {
+        let (x, y) = gate_selector.as_xy();
+        x.into_repr().write_be(&mut res).unwrap();
+        y.into_repr().write_be(&mut res).unwrap();
+    }
+
+    // permutation commitments
+    assert_eq!(4, verification_key.permutation_commitments.len());
+
+    for permutation in verification_key.permutation_commitments {
+        let (x, y) = permutation.as_xy();
+        x.into_repr().write_be(&mut res).unwrap();
+        y.into_repr().write_be(&mut res).unwrap();
+    }
+
+    // lookup tables commitments
+    assert_eq!(4, verification_key.lookup_tables_commitments.len());
+
+    for table_commit in verification_key.lookup_tables_commitments {
+        let (x, y) = table_commit.as_xy();
+        x.into_repr().write_be(&mut res).unwrap();
+        y.into_repr().write_be(&mut res).unwrap();
+    }
+
+    // lookup selector commitment
+    let lookup_selector = verification_key.lookup_selector_commitment.unwrap();
+    let (x, y) = lookup_selector.as_xy();
+    x.into_repr().write_be(&mut res).unwrap();
+    y.into_repr().write_be(&mut res).unwrap();
+
+    // table type commitment
+    let lookup_table = verification_key.lookup_table_type_commitment.unwrap();
+    let (x, y) = lookup_table.as_xy();
+    x.into_repr().write_be(&mut res).unwrap();
+    // y.into_repr().write_be(&mut res).unwrap();
+
+    // flag for using recursive part
+    // Fq::default().into_repr().write_be(&mut res).unwrap();
+    
+    let mut hasher = Keccak256::new();
+    hasher.update(&res);
+    let computed_vk_hash = hasher.finalize();
+
+    let computed_vk_hash = H256::from_slice(&computed_vk_hash);
+
+    println!("=== Verification Key Hash Verification:");
+    println!("  Verification Key Hash from L1:       0x{:}", hex::encode(vk_hash_from_l1));
+    println!("  Computed Verification Key Hash:      0x{:}", hex::encode(computed_vk_hash));
+
+    assert_eq!(computed_vk_hash, vk_hash_from_l1);
 }
