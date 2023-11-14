@@ -3,6 +3,8 @@ name = "era-boojum-validator-cli"
 version = "0.1.0"
 edition = "2021"
 
+include = ["/abis", "/downloaded_data", "/example_proofs", "/src"]
+
 [dependencies]
 circuit_definitions = {git = "https://github.com/matter-labs/era-zkevm_test_harness.git", branch="v1.4.0"}
 # circuit_definitions = { path = "../zkevm_test_harness/circuit_definitions"}
