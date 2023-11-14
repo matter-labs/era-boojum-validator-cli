@@ -50,6 +50,7 @@ cargo run -- --batch 109939 --network mainnet --l1-rpc https://rpc.ankr.com/eth
 --network - Along with batch number, defines if you want to verify a proof for Era testnet or mainnet. It defaults to mainnet. Accepts "mainnet" or "testnet"
 --l1-rpc - The RPC url required if you want the CLI to also reconstruct the input using data from Ethereum for our current prover, and compare with the ones for the new prover (basically confirming that both proofs are equivalent).
 --proof - Optionally you can pass the file path for a local proof to be verified. The CLI will use the batch option if both are passed.
+--update_verification_key - Specifes if the verification key should be updated from [github](https://github.com/matter-labs/era-contracts/blob/main/tools/data/scheduler_key.json).
 ```
 # Future plans
 
