@@ -55,7 +55,7 @@ pub async fn verify_snark(
 
     println!("=== Loading verification key.");
     use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
-    let vk_inner : circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> =
+    let vk_inner : VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> =
         serde_json::from_str(&fs::read_to_string(args.snark_vk_scheduler_key_file.clone()).unwrap()).unwrap();
 
     proof.scheduler_proof.n = vk_inner.n;
