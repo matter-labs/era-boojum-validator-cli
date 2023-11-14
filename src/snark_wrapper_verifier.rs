@@ -211,6 +211,12 @@ fn check_verification_key(
         y.into_repr().write_be(&mut res).unwrap();
     }
 
+    // lookup selector commitment
+    let lookup_selector = verification_key.lookup_selector_commitment.unwrap();
+    let (x, y) = lookup_selector.as_xy();
+    x.into_repr().write_be(&mut res).unwrap();
+    y.into_repr().write_be(&mut res).unwrap();
+
     // lookup tables commitments
     assert_eq!(4, verification_key.lookup_tables_commitments.len());
 
@@ -219,12 +225,6 @@ fn check_verification_key(
         x.into_repr().write_be(&mut res).unwrap();
         y.into_repr().write_be(&mut res).unwrap();
     }
-
-    // lookup selector commitment
-    let lookup_selector = verification_key.lookup_selector_commitment.unwrap();
-    let (x, y) = lookup_selector.as_xy();
-    x.into_repr().write_be(&mut res).unwrap();
-    y.into_repr().write_be(&mut res).unwrap();
 
     // table type commitment
     let lookup_table = verification_key.lookup_table_type_commitment.unwrap();
