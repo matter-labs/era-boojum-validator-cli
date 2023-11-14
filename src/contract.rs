@@ -1,5 +1,4 @@
 use colored::Colorize;
-use ethers::abi::Abi;
 use ethers::prelude::*;
 use std::str::FromStr;
 
@@ -12,6 +11,8 @@ pub struct ContractConfig {
 
 impl ContractConfig {
     pub fn new(l1_rpc_url: String, network: String) -> Self {
+        use ethers::abi::Abi;
+        
         if network != "mainnet" && network != "sepolia" {
             panic!(
                 "Please use network name `{}` or `{}`",
@@ -25,7 +26,7 @@ impl ContractConfig {
 
         let diamond_proxy_abi: Abi =
             Abi::load(&include_bytes!("../abis/IZKSync.json")[..]).unwrap();
-        let verifier_abi: Abi = Abi::load(&include_bytes!("../abis/Verifier.json")[..]).unwrap();
+        let verifier_abi: Abi = Abi::load(&include_bytes!("../abis/IVerifier.json")[..]).unwrap();
 
         let diamond_proxy_address = if network.to_string() == "mainnet" {
             Address::from_str("32400084c286cf3e17e7b677ea9583e60a000324").unwrap()
