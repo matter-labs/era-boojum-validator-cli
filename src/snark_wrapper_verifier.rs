@@ -245,5 +245,5 @@ fn check_verification_key(
     println!("  Verification Key Hash from L1:       0x{:}", hex::encode(vk_hash_from_l1));
     println!("  Computed Verification Key Hash:      0x{:}", hex::encode(computed_vk_hash));
 
-    assert_eq!(computed_vk_hash, vk_hash_from_l1);
+    assert_eq!(computed_vk_hash, vk_hash_from_l1, "Make sure the verification key is updated.");
 }
