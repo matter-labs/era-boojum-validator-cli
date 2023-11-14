@@ -1,15 +1,15 @@
-use circuit_definitions::franklin_crypto::bellman::compact_bn256::{Fr, Fq};
+use circuit_definitions::franklin_crypto::bellman::compact_bn256::{Fq, Fr};
+use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::cs::Circuit;
 use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
 use circuit_definitions::franklin_crypto::bellman::PrimeFieldRepr;
 use circuit_definitions::{
-    circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit,
     ethereum_types::U256,
     franklin_crypto::bellman::{
         bn256::{self, Bn256},
         CurveAffine, Engine, PrimeField,
     },
 };
-use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
 use primitive_types::H256;
 
 fn hex_to_scalar<F: PrimeField>(el: &U256) -> F {
@@ -31,7 +31,7 @@ fn deserialize_fe(felt: U256) -> Fr {
     Fr::from_str(&felt.to_string()).unwrap()
 }
 
-pub fn deserialize_proof(mut proof: Vec<U256>) -> Proof<Bn256, ZkSyncSnarkWrapperCircuit> {
+pub fn deserialize_proof<T: Circuit<Bn256>>(mut proof: Vec<U256>) -> Proof<Bn256, T> {
     let y = proof.pop().unwrap();
     let x = proof.pop().unwrap();
     let opening_proof_at_z_omega = deserialize_g1((x, y));
@@ -99,7 +99,7 @@ pub fn deserialize_proof(mut proof: Vec<U256>) -> Proof<Bn256, ZkSyncSnarkWrappe
     }
     state_polys_commitments.reverse();
 
-    let mut proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit> = Proof::empty();
+    let mut proof: Proof<Bn256, T> = Proof::empty();
 
     proof.state_polys_commitments = state_polys_commitments;
     proof.copy_permutation_grand_product_commitment = copy_permutation_grand_product_commitment;
@@ -153,7 +153,7 @@ fn serialize_fe_for_ethereum(field_element: &Fr) -> U256 {
     U256::from_big_endian(&be_bytes[..])
 }
 
-pub fn serialize_proof(proof: &Proof<Bn256, ZkSyncSnarkWrapperCircuit>) -> (Vec<U256>, Vec<U256>) {
+pub fn serialize_proof<T: Circuit<Bn256>>(proof: &Proof<Bn256, T>) -> (Vec<U256>, Vec<U256>) {
     let mut inputs = vec![];
     for input in proof.inputs.iter() {
         inputs.push(serialize_fe_for_ethereum(&input));
@@ -245,7 +245,9 @@ pub fn serialize_proof(proof: &Proof<Bn256, ZkSyncSnarkWrapperCircuit>) -> (Vec<
     (inputs, serialized_proof)
 }
 
-pub fn calculate_verification_key_hash(verification_key: VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit>) -> H256 {
+pub fn calculate_verification_key_hash<E: Engine, C: Circuit<E>>(
+    verification_key: VerificationKey<E, C>,
+) -> H256 {
     use sha3::{Digest, Keccak256};
 
     let mut res = vec![];
@@ -300,7 +302,7 @@ pub fn calculate_verification_key_hash(verification_key: VerificationKey<Bn256, 
 
     // flag for using recursive part
     Fq::default().into_repr().write_be(&mut res).unwrap();
-    
+
     let mut hasher = Keccak256::new();
     hasher.update(&res);
     let computed_vk_hash = hasher.finalize();

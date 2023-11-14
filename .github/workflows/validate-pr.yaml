@@ -12,7 +12,7 @@ jobs:
         id: setup-rust
         with:
           toolchain: nightly-2023-08-21 # TODO: update after https://github.com/rust-lang/rust/issues/113500 is fixed
-          rustflags: "-Z macro-backtrace"
+          rustflags: ""
       - name: Print used Rust versions
         run: |
           echo "Rustc version: ${{ steps.setup-rust.outputs.rustc-version }}"
