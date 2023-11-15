@@ -25,7 +25,7 @@ impl ContractConfig {
             Provider::<Http>::try_from(l1_rpc_url).expect("Failed to connect to provider");
 
         let diamond_proxy_abi: Abi =
-            Abi::load(&include_bytes!("../abis/IZKSync.json")[..]).unwrap();
+            Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
         let verifier_abi: Abi = Abi::load(&include_bytes!("../abis/IVerifier.json")[..]).unwrap();
 
         let diamond_proxy_address = get_diamond_proxy_address(network);

@@ -935,7 +935,7 @@ dependencies = [
  "handlebars",
  "hex",
  "paste",
- "rescue_poseidon 0.4.1 (git+https://github.com/matter-labs/rescue-poseidon.git?branch=poseidon2)",
+ "rescue_poseidon 0.4.1 (git+https://github.com/matter-labs/rescue-poseidon?branch=poseidon2)",
  "serde",
  "serde_derive",
  "serde_json",
@@ -4296,7 +4296,7 @@ dependencies = [
 [[package]]
 name = "rescue_poseidon"
 version = "0.4.1"
-source = "git+https://github.com/matter-labs/rescue-poseidon.git?branch=poseidon2#c4a788471710bdb7aa0f59e8756b45ef93cdd2b2"
+source = "git+https://github.com/matter-labs/rescue-poseidon?branch=poseidon2#c4a788471710bdb7aa0f59e8756b45ef93cdd2b2"
 dependencies = [
  "addchain",
  "arrayvec 0.7.4",
@@ -4439,9 +4439,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.23"
+version = "0.38.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffb93593068e9babdad10e4fce47dc9b3ac25315a72a59766ffd9e9a71996a04"
+checksum = "9ad981d6c340a49cdc40a1028d9c6084ec7e9fa33fcb839cab656a267071e234"
 dependencies = [
  "bitflags 2.4.1",
  "errno",
@@ -5046,7 +5046,7 @@ source = "git+https://github.com/matter-labs/snark-wrapper.git?branch=main#42661
 dependencies = [
  "derivative",
  "rand 0.4.6",
- "rescue_poseidon 0.4.1 (git+https://github.com/matter-labs/rescue-poseidon.git?branch=poseidon2)",
+ "rescue_poseidon 0.4.1 (git+https://github.com/matter-labs/rescue-poseidon?branch=poseidon2)",
 ]
 
 [[package]]
@@ -5859,7 +5859,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 [[package]]
 name = "vlog"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#f4313a4e5a67f616d2dfa8f364c47cb73cef1ec7"
+source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#44cbb9476775b943bfed236253fda70ee067956f"
 dependencies = [
  "chrono",
  "sentry",
@@ -6397,7 +6397,7 @@ dependencies = [
 [[package]]
 name = "zksync_basic_types"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#f4313a4e5a67f616d2dfa8f364c47cb73cef1ec7"
+source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#44cbb9476775b943bfed236253fda70ee067956f"
 dependencies = [
  "serde",
  "serde_json",
@@ -6407,7 +6407,7 @@ dependencies = [
 [[package]]
 name = "zksync_contracts"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#f4313a4e5a67f616d2dfa8f364c47cb73cef1ec7"
+source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#44cbb9476775b943bfed236253fda70ee067956f"
 dependencies = [
  "envy",
  "ethabi",
@@ -6421,7 +6421,7 @@ dependencies = [
 [[package]]
 name = "zksync_crypto"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#f4313a4e5a67f616d2dfa8f364c47cb73cef1ec7"
+source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#44cbb9476775b943bfed236253fda70ee067956f"
 dependencies = [
  "base64 0.13.1",
  "blake2 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -6436,7 +6436,7 @@ dependencies = [
 [[package]]
 name = "zksync_mini_merkle_tree"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#f4313a4e5a67f616d2dfa8f364c47cb73cef1ec7"
+source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#44cbb9476775b943bfed236253fda70ee067956f"
 dependencies = [
  "once_cell",
  "zksync_basic_types",
@@ -6446,7 +6446,7 @@ dependencies = [
 [[package]]
 name = "zksync_system_constants"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#f4313a4e5a67f616d2dfa8f364c47cb73cef1ec7"
+source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#44cbb9476775b943bfed236253fda70ee067956f"
 dependencies = [
  "anyhow",
  "bigdecimal",
@@ -6464,7 +6464,7 @@ dependencies = [
 [[package]]
 name = "zksync_types"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#f4313a4e5a67f616d2dfa8f364c47cb73cef1ec7"
+source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#44cbb9476775b943bfed236253fda70ee067956f"
 dependencies = [
  "blake2 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono",
@@ -6494,7 +6494,7 @@ dependencies = [
 [[package]]
 name = "zksync_utils"
 version = "0.1.0"
-source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#f4313a4e5a67f616d2dfa8f364c47cb73cef1ec7"
+source = "git+https://github.com/matter-labs/zksync-era.git?branch=main#44cbb9476775b943bfed236253fda70ee067956f"
 dependencies = [
  "anyhow",
  "bigdecimal",
