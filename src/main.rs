@@ -5,26 +5,24 @@ use circuit_definitions::circuit_definitions::recursion_layer::scheduler::Concre
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use ethers::abi::Abi;
-use ethers::prelude::*;
-use ethers::providers::{Provider, Http};
 use serde::Deserialize;
-use std::env;
-use std::io::{self, Read};
-use std::str::FromStr;
+use std::io::Read;
 use std::{fs::File, process};
 
-mod crypto;
+mod contract;
 mod inputs;
 mod params;
 mod requests;
 mod snark_wrapper_verifier;
+mod utils;
 
+use crate::contract::ContractConfig;
 use crate::inputs::generate_inputs;
 use crate::requests::L1BatchAndProofData;
 use crate::snark_wrapper_verifier::{
     generate_solidity_test, verify_snark, verify_snark_from_l1, L1BatchProofForL1,
 };
+use crate::utils::check_should_download_verification_key;
 pub mod block_header;
 
 use circuit_definitions::boojum::{
@@ -37,8 +35,6 @@ use circuit_definitions::circuit_definitions::{
     base_layer::{BaseProofsTreeHasher, ZkSyncBaseLayerProof},
     recursion_layer::{ZkSyncRecursionLayerProof, ZkSyncRecursionLayerStorage},
 };
-
-const VERIFICATION_KEY_FILE_GITHUB: &str = "https://raw.githubusercontent.com/matter-labs/era-contracts/main/tools/data/scheduler_key.json";
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub enum FriProofWrapper {
@@ -165,30 +161,7 @@ async fn main() {
         return;
     }
 
-    #[allow(non_snake_case)]
-    let DIAMOND_PROXY = if opt.network.clone().to_string() == "mainnet" {
-        "32400084c286cf3e17e7b677ea9583e60a000324"
-    } else {
-        "74fba6cca06eed111e03719d6bfa26ae7680b3ea"
-    };
-
-
-    let file_path = "src/keys/scheduler_key.json";
-    let file = env::current_dir().unwrap().join(file_path);
-    let file_exists = file.exists();
-
-    let should_update =
-        opt.update_verification_key.is_some() && opt.update_verification_key.unwrap();
-
-    if file_exists && !should_update {
-        println!("verifiction key exists")
-    } else {
-        println!("verifiction key does not exist or update requested, downloading...");
-        let resp = reqwest::get(VERIFICATION_KEY_FILE_GITHUB).await.expect("request failed");
-        let body = resp.text().await.expect("body invalid");
-        let mut out = File::create(file_path).expect("failed to create file");
-        io::copy(&mut body.as_bytes(), &mut out).expect("failed to copy content");
-    }
+    check_should_download_verification_key(opt.update_verification_key).await;
 
     println!("{}", "Fetching and validating the proof itself".on_blue());
     if l1_rpc.is_none() {
@@ -198,8 +171,7 @@ async fn main() {
                 .yellow()
         );
     } else {
-        // Then we verify the public inputs (that contain the circuit code, prev and next root hash etc)
-        // To make sure that the proof is matching a correct computation.
+        let contract = ContractConfig::new(l1_rpc.clone().unwrap(), network.clone());
 
         let L1BatchAndProofData {
             aux_output,
@@ -209,30 +181,7 @@ async fn main() {
             block_number,
         } = requests::fetch_l1_data(batch_number, &network, &l1_rpc.clone().unwrap()).await;
 
-        let address = Address::from_str(DIAMOND_PROXY).unwrap();
-        let client = Provider::<Http>::try_from(l1_rpc.clone().unwrap()).expect("Failed to connect to provider");
-        let diamond_contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZKSync.json")[..]).unwrap();
-        let verifier_contract_abi: Abi = Abi::load(&include_bytes!("../abis/Verifier.json")[..]).unwrap();
-        let diamond_base_contract: BaseContract = diamond_contract_abi.into();
-        let verifier_base_contract: BaseContract = verifier_contract_abi.into();
-        let diamond_contract_instance = diamond_base_contract.into_contract::<Provider<Http>>(address, client.clone());
-        
-        let verifier_address = diamond_contract_instance
-            .method::<_, Address>("getVerifier", ())
-            .unwrap()
-            .block(block_number)
-            .call()
-            .await
-            .unwrap();
-
-        let verifier_contract_instance = verifier_base_contract.into_contract::<Provider<Http>>(verifier_address, client);
-        let vk_hash = verifier_contract_instance
-            .method::<_, H256>("verificationKeyHash", ())
-            .unwrap()
-            .block(block_number)
-            .call()
-            .await
-            .unwrap();
+        let vk_hash = contract.get_verification_key_hash(block_number).await;
 
         let snark_vk_scheduler_key_file = "src/keys/scheduler_key.json";
 
@@ -246,11 +195,15 @@ async fn main() {
         batch_proof.scheduler_proof.inputs = inputs;
 
         // First, we verify that the proof itself is valid.
-        verify_snark_from_l1(snark_vk_scheduler_key_file.to_string(), batch_proof, vk_hash)
-            .await
-            .unwrap();
+        verify_snark_from_l1(
+            snark_vk_scheduler_key_file.to_string(),
+            batch_proof,
+            vk_hash,
+        )
+        .await
+        .unwrap();
 
-        println!("\n");    
+        println!("\n");
     };
 
     println!("\n");
@@ -263,8 +216,8 @@ mod test {
     use crate::params::{to_goldilocks, CIRCUIT_V5};
     use crate::proof_from_file;
     use crate::requests::BatchL1Data;
-    use circuit_definitions::franklin_crypto::bellman::pairing::bn256::Fr;
-    use circuit_definitions::franklin_crypto::bellman::{Field, PrimeField};
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::pairing::bn256::Fr;
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::{Field, PrimeField};
     use zksync_types::H256;
 
     use super::*;

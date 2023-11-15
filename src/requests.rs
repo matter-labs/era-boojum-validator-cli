@@ -1,7 +1,8 @@
 use circuit_definitions::boojum::field::goldilocks::GoldilocksField;
 use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
-use circuit_definitions::franklin_crypto::bellman::bn256::Bn256;
-use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::bn256::Bn256;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use crypto::deserialize_proof;
 use ethers::abi::Function;
 use once_cell::sync::Lazy;
 use std::fs;
@@ -9,7 +10,7 @@ use std::io::Cursor;
 use zksync_types::{ethabi, H256};
 
 use crate::block_header::{self, BlockAuxilaryOutput, VerifierParams};
-use crate::crypto::deserialize_proof;
+use crate::contract::get_diamond_proxy_address;
 use crate::snark_wrapper_verifier::L1BatchProofForL1;
 
 pub static BLOCK_COMMIT_EVENT_SIGNATURE: Lazy<H256> = Lazy::new(|| {
@@ -126,7 +127,7 @@ pub struct L1BatchAndProofData {
     pub aux_output: BlockAuxilaryOutput,
     pub scheduler_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit>,
     pub verifier_params: VerifierParams,
-    pub block_number: u64
+    pub block_number: u64,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -166,19 +167,12 @@ pub async fn fetch_l1_commit_data(
     use ethers::prelude::*;
     use std::str::FromStr;
 
-    #[allow(non_snake_case)]
-    let DIAMOND_PROXY = if network.to_string() == "mainnet" {
-        "32400084c286cf3e17e7b677ea9583e60a000324"
-    } else {
-        "74fba6cca06eed111e03719d6bfa26ae7680b3ea"
-    };
-
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
     let function: Function = contract_abi.functions_by_name("commitBatches").unwrap()[0].clone();
     let previous_batch_number = batch_number - 1;
-    let address = Address::from_str(DIAMOND_PROXY).unwrap();
+    let address = get_diamond_proxy_address(network.to_string());
 
     let mut roots = vec![];
     let mut l1_block_number = 0;
@@ -484,20 +478,13 @@ async fn fetch_verifier_param_from_l1(
 ) -> VerifierParams {
     use ethers::abi::Abi;
     use ethers::prelude::*;
-    use std::str::FromStr;
-
-    #[allow(non_snake_case)]
-    let DIAMOND_PROXY = if network.to_string() == "mainnet" {
-        Address::from_str("32400084c286cf3e17e7b677ea9583e60a000324").unwrap()
-    } else {
-        Address::from_str("74fba6cca06eed111e03719d6bfa26ae7680b3ea").unwrap()
-    };
 
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
 
     let base_contract: BaseContract = contract_abi.into();
-    let contract_instance = base_contract.into_contract::<Provider<Http>>(DIAMOND_PROXY, client);
+    let address = get_diamond_proxy_address(network.to_string());
+    let contract_instance = base_contract.into_contract::<Provider<Http>>(address, client);
     let (
         recursion_node_level_vk_hash,
         recursion_leaf_level_vk_hash,
