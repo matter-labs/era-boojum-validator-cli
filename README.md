@@ -53,7 +53,7 @@ cargo run -- --batch 109939 --network mainnet --l1-rpc https://rpc.ankr.com/eth 
 ```shell
 --batch - The L1 batch number you want to verify the generated proof
 --network - Along with batch number, defines if you want to verify a proof for Era testnet or mainnet. It defaults to mainnet. Accepts "mainnet" or "testnet"
---l1-rpc - The RPC url required to pull data for a given batchs proof from L1.
+--l1-rpc - The RPC url required to pull data from L1.
 --update-verification-key - Specifes if the verification key should be updated from [github](https://github.com/matter-labs/era-contracts/blob/main/tools/data/scheduler_key.json).
 ```
 # Future plans

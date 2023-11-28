@@ -56,7 +56,7 @@ pub fn deserialize_proof<T: Circuit<Bn256>>(mut proof: Vec<U256>) -> Proof<Bn256
     }
     copy_permutation_polys_openings_at_z.reverse();
 
-    let gate_selectors_openings_at_z = vec![(0usize, deserialize_fe(proof.pop().unwrap()))];
+    let gate_selectors_openings_at_z = vec![(0_usize, deserialize_fe(proof.pop().unwrap()))];
 
     // Hardcoding 1, 3 as the first to values in the dilations given thats what the other proofs show
     let state_polys_openings_at_dilations = vec![deserialize_fe(proof.pop().unwrap())];
