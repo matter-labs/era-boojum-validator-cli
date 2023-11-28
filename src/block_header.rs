@@ -95,17 +95,26 @@ pub fn parse_aux_data(func: &Function, calldata: &[u8]) -> BlockAuxilaryOutput {
     let committed_batch = parsed_calldata.pop().unwrap();
 
     let abi::Token::Array(committed_batch) = committed_batch else {
-        panic!();
+        panic!("failed to deconstruct (1)");
     };
 
     let abi::Token::Tuple(committed_batch) = committed_batch[0].clone() else {
-        panic!();
+        panic!("failed to deconstruct (2)");
     };
 
-    let [abi::Token::Uint(_batch_number), abi::Token::Uint(_timestamp), abi::Token::Uint(_index_repeated_storage_changes), abi::Token::FixedBytes(_new_state_root), abi::Token::Uint(_number_l1_txns), abi::Token::FixedBytes(_priority_operations_hash), abi::Token::FixedBytes(bootloader_contents_hash), abi::Token::FixedBytes(event_queue_state_hash), abi::Token::Bytes(sys_logs), abi::Token::Bytes(_total_pubdata)] =
-        committed_batch.as_slice()
-    else {
-        panic!();
+    let [
+        abi::Token::Uint(_batch_number), 
+        abi::Token::Uint(_timestamp), 
+        abi::Token::Uint(_index_repeated_storage_changes), 
+        abi::Token::FixedBytes(_new_state_root), 
+        abi::Token::Uint(_number_l1_txns), 
+        abi::Token::FixedBytes(_priority_operations_hash), 
+        abi::Token::FixedBytes(bootloader_contents_hash), 
+        abi::Token::FixedBytes(event_queue_state_hash), 
+        abi::Token::Bytes(sys_logs), 
+        abi::Token::Bytes(_total_pubdata)
+    ] = committed_batch.as_slice() else {
+        panic!("failed to deconstruct commitBlocks calldata");
     };
 
     assert_eq!(bootloader_contents_hash.len(), 32);
@@ -117,12 +126,13 @@ pub fn parse_aux_data(func: &Function, calldata: &[u8]) -> BlockAuxilaryOutput {
     let mut event_queue_state_hash_buffer = [0u8; 32];
     event_queue_state_hash_buffer.copy_from_slice(event_queue_state_hash);
 
-    assert!(sys_logs.len() % L2ToL1Log::SERIALIZED_SIZE == 0);
+    assert!(sys_logs.len() % L2ToL1Log::SERIALIZED_SIZE == 0, "sys logs length should be a factor of serialized size");
     let state_diff_hash_sys_log = sys_logs
         .chunks(L2ToL1Log::SERIALIZED_SIZE)
         .into_iter()
         .map(L2ToL1Log::from_slice)
-        .find(|log| log.key == H256::from_low_u64_be(2u64))
+        // The value 2 comes from the key in this enum https://github.com/matter-labs/era-system-contracts/blob/d42f707cbe6938a76fa29f4bf76203af1e13f51f/contracts/Constants.sol#L90
+        .find(|log| log.key == H256::from_low_u64_be(2_u64))
         .unwrap();
 
     let system_logs_hash = keccak256(sys_logs);
@@ -194,6 +204,7 @@ impl BlockContentHeader {
     }
 }
 
+/// Verifier config params describing the circuit to be verified.
 pub struct VerifierParams {
     pub recursion_node_level_vk_hash: [u8; 32],
     pub recursion_leaf_level_vk_hash: [u8; 32],
