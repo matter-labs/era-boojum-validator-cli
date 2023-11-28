@@ -1,7 +1,8 @@
 use colored::Colorize;
-use ethers::prelude::*;
+use ethers::prelude::{Provider, Http, BaseContract, Address, H256};
 use std::str::FromStr;
 
+/// Holds various values/parameters needed to interact with on chain data
 pub struct ContractConfig {
     pub provider: Provider<Http>,
     pub diamond_proxy_contract: BaseContract,
@@ -17,7 +18,7 @@ impl ContractConfig {
             panic!(
                 "Please use network name `{}` or `{}`",
                 "mainnet".yellow(),
-                "testnet".yellow()
+                "sepolia".yellow()
             );
         }
 
@@ -41,6 +42,8 @@ impl ContractConfig {
         }
     }
 
+    /// Pull the current verification key hash from on chain. Need to query the diamond proxy for the current used
+    /// verifier contract address.
     pub async fn get_verification_key_hash(&self, block_number: u64) -> H256 {
         let diamond_contract_instance = self
             .diamond_proxy_contract
@@ -69,6 +72,7 @@ impl ContractConfig {
     }
 }
 
+/// Returns the diamond proxy address for a given network.
 pub fn get_diamond_proxy_address(network: String) -> Address {
     if network == "mainnet" {
         Address::from_str("32400084c286cf3e17e7b677ea9583e60a000324").unwrap()

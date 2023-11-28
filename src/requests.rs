@@ -1,13 +1,18 @@
+use std::str::FromStr;
+
 use circuit_definitions::boojum::field::goldilocks::GoldilocksField;
 use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
 use circuit_definitions::snark_wrapper::franklin_crypto::bellman::bn256::Bn256;
 use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
 use crypto::deserialize_proof;
-use ethers::abi::Function;
+use ethers::abi::{Function, Abi, Token};
+use ethers::types::TxHash;
+use ethers::contract::BaseContract;
+use ethers::providers::{Provider, Http, Middleware};
 use once_cell::sync::Lazy;
-use std::fs;
-use std::io::Cursor;
 use zksync_types::{ethabi, H256};
+use primitive_types::U256;
+use colored::Colorize;
 
 use crate::block_header::{self, BlockAuxilaryOutput, VerifierParams};
 use crate::contract::get_diamond_proxy_address;
@@ -23,88 +28,6 @@ pub static BLOCK_COMMIT_EVENT_SIGNATURE: Lazy<H256> = Lazy::new(|| {
         ],
     )
 });
-
-#[allow(dead_code)]
-pub enum StorageDataType {
-    Proof,
-    AuxData,
-}
-
-/// Fetches data from Google cloud and caches it locally.
-pub async fn _fetch_data_from_storage(
-    data_type: StorageDataType,
-    batch_number: u64,
-    network: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let (expected_file_path, url) = match data_type {
-        StorageDataType::Proof => (
-            format!("./downloaded_data/proof_{}_{}.bin", network, batch_number),
-            format!(
-                "https://storage.googleapis.com/zksync-era-{}-proofs/proofs_fri/proof_{}.bin",
-                network, batch_number
-            )
-        ),
-        StorageDataType::AuxData => (
-            format!("./downloaded_data/aux_{}_{}.bin", network, batch_number),
-            format!("https://storage.googleapis.com/zksync-era-{}-proofs/scheduler_witness_jobs_fri/aux_output_witness_{}.bin", network, batch_number)
-        )
-    };
-
-    let path = std::path::Path::new(&expected_file_path);
-    if path.exists() {
-        return Ok(expected_file_path);
-    }
-
-    let client = reqwest::Client::new();
-    let data = client.get(url).send().await?;
-
-    if data.status().is_success() {
-        fs::create_dir_all("./downloaded_data")?;
-
-        let mut file = std::fs::File::create(expected_file_path.clone())?;
-        let mut content = Cursor::new(data.bytes().await?);
-        std::io::copy(&mut content, &mut file)?;
-
-        return Ok(expected_file_path);
-    } else {
-        return Err(format!(
-            "Data for batch {} on network {} not found",
-            batch_number, network
-        )
-        .into());
-    }
-}
-
-/// Download the proof file if it exists and saves locally
-pub async fn _fetch_proof_from_storage(
-    batch_number: u64,
-    network: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
-    println!(
-        "Downloading proof for batch {} on network {}",
-        batch_number, network
-    );
-
-    _fetch_data_from_storage(StorageDataType::Proof, batch_number, network).await
-}
-
-/// Download the proof file if it exists and saves locally
-pub async fn _fetch_aux_data_from_storage(
-    batch_number: u64,
-    network: &str,
-) -> Result<AuxOutputWitnessWrapper, Box<dyn std::error::Error>> {
-    println!(
-        "Downloading aux data for batch {} on network {}",
-        batch_number, network
-    );
-
-    let aux_path = _fetch_data_from_storage(StorageDataType::AuxData, batch_number, network).await;
-
-    let bytes = std::fs::read(aux_path.unwrap())?;
-
-    let result: AuxOutputWitnessWrapper = bincode::deserialize(&bytes[..]).unwrap();
-    Ok(result)
-}
 
 #[derive(Debug)]
 pub struct BatchL1Data {
@@ -162,11 +85,6 @@ pub async fn fetch_l1_commit_data(
     network: &str,
     rpc_url: &str,
 ) -> Result<(BatchL1Data, BlockAuxilaryOutput), String> {
-    use colored::Colorize;
-    use ethers::abi::Abi;
-    use ethers::prelude::*;
-    use std::str::FromStr;
-
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
@@ -284,9 +202,6 @@ pub async fn fetch_proof_from_l1(
     network: &str,
     rpc_url: &str,
 ) -> (L1BatchProofForL1, u64) {
-    use ethers::abi::{Abi, Token};
-    use ethers::prelude::*;
-    use std::str::FromStr;
 
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
@@ -476,9 +391,6 @@ async fn fetch_verifier_param_from_l1(
     network: &str,
     rpc_url: &str,
 ) -> VerifierParams {
-    use ethers::abi::Abi;
-    use ethers::prelude::*;
-
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
 
