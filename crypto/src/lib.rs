@@ -14,10 +14,12 @@ use primitive_types::H256;
 
 pub mod serialize;
 
+/// Transform an element represented as a U256 into a prime field element.
 fn hex_to_scalar<F: PrimeField>(el: &U256) -> F {
     F::from_str(&el.to_string()).unwrap()
 }
 
+/// Transform a point represented as a pair of U256 into its affine representation.
 fn deserialize_g1(point: (U256, U256)) -> <bn256::Bn256 as Engine>::G1Affine {
     if point == (U256::zero(), U256::zero()) {
         return <<bn256::Bn256 as Engine>::G1Affine as CurveAffine>::zero();
@@ -29,10 +31,13 @@ fn deserialize_g1(point: (U256, U256)) -> <bn256::Bn256 as Engine>::G1Affine {
     <<bn256::Bn256 as Engine>::G1Affine as CurveAffine>::from_xy_unchecked(x_scalar, y_scalar)
 }
 
+/// Transform a field element into the field representation.
 fn deserialize_fe(felt: U256) -> Fr {
     Fr::from_str(&felt.to_string()).unwrap()
 }
 
+/// Works as the inverse of serialize proof used to prepare a proof for submission to L1 (see serialize.rs or README). We process the proof in reverse setting all fields we can.
+/// Note that some of the fields are hardcoded as they are lost in serialization.
 pub fn deserialize_proof<T: Circuit<Bn256>>(mut proof: Vec<U256>) -> Proof<Bn256, T> {
     let y = proof.pop().unwrap();
     let x = proof.pop().unwrap();
@@ -128,8 +133,7 @@ pub fn deserialize_proof<T: Circuit<Bn256>>(mut proof: Vec<U256>) -> Proof<Bn256
     proof
 }
 
-
-
+/// Calculates the hash of a verification key. This function corresponds 1:1 with the following solidity code: https://github.com/matter-labs/era-contracts/blob/3e2bee96e412bac7c0a58c4b919837b59e9af36e/ethereum/contracts/zksync/Verifier.sol#L260
 pub fn calculate_verification_key_hash<E: Engine, C: Circuit<E>>(
     verification_key: VerificationKey<E, C>,
 ) -> H256 {
@@ -193,4 +197,27 @@ pub fn calculate_verification_key_hash<E: Engine, C: Circuit<E>>(
     let computed_vk_hash = hasher.finalize();
 
     H256::from_slice(&computed_vk_hash)
+}
+
+#[cfg(test)]
+mod test {
+    use std::{fs, str::FromStr};
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::pairing::bn256::Bn256;
+    use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
+    use primitive_types::H256;
+    use super::calculate_verification_key_hash;
+
+    #[test]
+    fn test_verification_key_hash() {
+        let vk_inner: VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> =
+            serde_json::from_str(&fs::read_to_string("keys/scheduler_key.json").unwrap())
+                .unwrap();
+
+        let verification_key_hash = calculate_verification_key_hash(vk_inner);
+
+        let exprected_vk_hash = H256::from_str("0x750d8e21be7555a6841472a5cacd24c75a7ceb34261aea61e72bb7423a7d30fc").unwrap();
+
+        assert_eq!(verification_key_hash, exprected_vk_hash)
+    }
 }
