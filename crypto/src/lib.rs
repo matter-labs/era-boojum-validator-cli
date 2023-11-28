@@ -201,12 +201,31 @@ pub fn calculate_verification_key_hash<E: Engine, C: Circuit<E>>(
 
 #[cfg(test)]
 mod test {
-    use std::{fs, str::FromStr};
-    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
+    use std::{fs::{self, File}, str::FromStr, io::Read};
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::{proof::Proof, setup::VerificationKey};
     use circuit_definitions::snark_wrapper::franklin_crypto::bellman::pairing::bn256::Bn256;
     use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
     use primitive_types::H256;
+    use serde::Deserialize;
+    use crate::deserialize_proof;
+    use crate::serialize::serialize_proof;
+
     use super::calculate_verification_key_hash;
+
+    #[derive(Clone, serde::Serialize, serde::Deserialize)]
+    struct L1BatchProofForL1 {
+        pub aggregation_result_coords: [[u8; 32]; 4],
+        pub scheduler_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit>,
+    }
+
+    fn proof_from_file<T: for<'a> Deserialize<'a>>(proof_path: &str) -> T {
+        let mut file = File::open(proof_path).unwrap();
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer).unwrap();
+
+        let proof: T = bincode::deserialize(buffer.as_slice()).unwrap();
+        proof
+    }
 
     #[test]
     fn test_verification_key_hash() {
@@ -220,4 +239,32 @@ mod test {
 
         assert_eq!(verification_key_hash, exprected_vk_hash)
     }
+
+    #[test]
+    fn test_proof_deserialization() {
+        let proof: L1BatchProofForL1 = proof_from_file("proofs/l1_batch_proof_1.bin");
+        let (_, serialized_proof) = serialize_proof(&proof.scheduler_proof);
+        let deserialized_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit> = deserialize_proof(serialized_proof);
+
+        assert_eq!(proof.scheduler_proof.state_polys_commitments, deserialized_proof.state_polys_commitments);
+        assert_eq!(proof.scheduler_proof.copy_permutation_grand_product_commitment, deserialized_proof.copy_permutation_grand_product_commitment);
+        assert_eq!(proof.scheduler_proof.lookup_s_poly_commitment, deserialized_proof.lookup_s_poly_commitment);
+        assert_eq!(proof.scheduler_proof.lookup_grand_product_commitment, deserialized_proof.lookup_grand_product_commitment);
+        assert_eq!(proof.scheduler_proof.quotient_poly_parts_commitments, deserialized_proof.quotient_poly_parts_commitments);
+        assert_eq!(proof.scheduler_proof.state_polys_openings_at_z, deserialized_proof.state_polys_openings_at_z);
+        assert_eq!(proof.scheduler_proof.state_polys_openings_at_dilations, deserialized_proof.state_polys_openings_at_dilations);
+        assert_eq!(proof.scheduler_proof.gate_selectors_openings_at_z, deserialized_proof.gate_selectors_openings_at_z);
+        assert_eq!(proof.scheduler_proof.copy_permutation_polys_openings_at_z, deserialized_proof.copy_permutation_polys_openings_at_z);
+        assert_eq!(proof.scheduler_proof.copy_permutation_grand_product_opening_at_z_omega, deserialized_proof.copy_permutation_grand_product_opening_at_z_omega);
+        assert_eq!(proof.scheduler_proof.lookup_s_poly_opening_at_z_omega, deserialized_proof.lookup_s_poly_opening_at_z_omega);
+        assert_eq!(proof.scheduler_proof.lookup_grand_product_opening_at_z_omega, deserialized_proof.lookup_grand_product_opening_at_z_omega);
+        assert_eq!(proof.scheduler_proof.lookup_t_poly_opening_at_z, deserialized_proof.lookup_t_poly_opening_at_z);
+        assert_eq!(proof.scheduler_proof.lookup_t_poly_opening_at_z_omega, deserialized_proof.lookup_t_poly_opening_at_z_omega);
+        assert_eq!(proof.scheduler_proof.lookup_selector_poly_opening_at_z, deserialized_proof.lookup_selector_poly_opening_at_z);
+        assert_eq!(proof.scheduler_proof.lookup_table_type_poly_opening_at_z, deserialized_proof.lookup_table_type_poly_opening_at_z);
+        assert_eq!(proof.scheduler_proof.quotient_poly_opening_at_z, deserialized_proof.quotient_poly_opening_at_z);
+        assert_eq!(proof.scheduler_proof.linearization_poly_opening_at_z, deserialized_proof.linearization_poly_opening_at_z);
+        assert_eq!(proof.scheduler_proof.opening_proof_at_z, deserialized_proof.opening_proof_at_z);
+        assert_eq!(proof.scheduler_proof.opening_proof_at_z_omega, deserialized_proof.opening_proof_at_z_omega);
+    }    
 }
