@@ -10,7 +10,7 @@ use circuit_definitions::{
     snark_wrapper::franklin_crypto::bellman::plonk::commitments::transcript::keccak_transcript::RollingKeccakTranscript,
 };
 use colored::Colorize;
-use crypto::{calculate_verification_key_hash, deserialize_proof, serialize_proof};
+use crypto::{calculate_verification_key_hash, deserialize_proof, serialize::serialize_proof};
 use primitive_types::H256;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
