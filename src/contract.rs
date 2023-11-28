@@ -12,7 +12,7 @@ pub struct ContractConfig {
 impl ContractConfig {
     pub fn new(l1_rpc_url: String, network: String) -> Self {
         use ethers::abi::Abi;
-        
+
         if network != "mainnet" && network != "sepolia" {
             panic!(
                 "Please use network name `{}` or `{}`",
