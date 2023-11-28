@@ -22,7 +22,7 @@ use crate::requests::L1BatchAndProofData;
 use crate::snark_wrapper_verifier::{
     generate_solidity_test, verify_snark, verify_snark_from_l1, L1BatchProofForL1,
 };
-use crate::utils::check_should_download_verification_key;
+use crate::utils::update_verification_key_if_needed;
 pub mod block_header;
 
 use circuit_definitions::boojum::{
@@ -161,7 +161,7 @@ async fn main() {
         return;
     }
 
-    check_should_download_verification_key(opt.update_verification_key).await;
+    update_verification_key_if_needed(opt.update_verification_key).await;
 
     println!("{}", "Fetching and validating the proof itself".on_blue());
     if l1_rpc.is_none() {
