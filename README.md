@@ -21,7 +21,7 @@ It also generates the test, that can be inserted in unittests for Verifier.sol.
 # 
 This is an experimental command line tool to verify the proofs for zkSync Era's updated proof system, Boojum [https://github.com/matter-labs/era-boojum](https://github.com/matter-labs/era-boojum).
 
-The CLI fetches Boojum proofs for a given batch, public inputs, and aux input all from L1 and verifies the proof off chain.
+The CLI fetches Boojum proofs for a given batch, public inputs, and aux input all from L1 and verifies the proof off chain. For testnet and sepolia chains, there may not be proofs submitted on chian for batches.
 
 Learn more about the Boojum proof system in our blog post: [https://zksync.mirror.xyz/HJ2Pj45EJkRdt5Pau-ZXwkV2ctPx8qFL19STM5jdYhc](https://zksync.mirror.xyz/HJ2Pj45EJkRdt5Pau-ZXwkV2ctPx8qFL19STM5jdYhc)
 
