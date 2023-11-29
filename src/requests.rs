@@ -1,3 +1,4 @@
+use std::process;
 use std::str::FromStr;
 
 use circuit_definitions::boojum::field::goldilocks::GoldilocksField;
@@ -256,6 +257,12 @@ pub async fn fetch_proof_from_l1(
             }
         })
         .collect::<Vec<U256>>();
+    
+    if network != "mainnet" && serialized_proof.len() == 0 {
+        let msg = format!("Proof doesn't exist for batch {} on network {}, exiting...", batch_number.to_string().red(), network.red());
+        println!("{}", msg);
+        process::exit(0);
+    }
 
     let x: Proof<Bn256, ZkSyncSnarkWrapperCircuit> = deserialize_proof(proof);
     (

@@ -80,7 +80,7 @@ pub fn get_diamond_proxy_address(network: String) -> Address {
     } else if network == "sepolia" {
         Address::from_str("74fba6cca06eed111e03719d6bfa26ae7680b3ea").unwrap()
     } else if network == "testnet" {
-        Address::from_str("bac523d144bb6f8cd9c43617b610a04c16adb231").unwrap()
+        Address::from_str("1908e2bf4a88f91e4ef0dc72f02b8ea36bea2319").unwrap()
     } else {
         panic!(
             "Please use network name `{}`, `{}`, or `{}`",
