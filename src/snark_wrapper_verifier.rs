@@ -10,7 +10,7 @@ use circuit_definitions::{
     snark_wrapper::franklin_crypto::bellman::plonk::commitments::transcript::keccak_transcript::RollingKeccakTranscript,
 };
 use colored::Colorize;
-use crypto::{calculate_verification_key_hash, deserialize_proof, serialize::serialize_proof};
+use crypto::calculate_verification_key_hash;
 use primitive_types::H256;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -19,79 +19,16 @@ pub struct L1BatchProofForL1 {
     pub scheduler_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit>,
 }
 
-pub async fn verify_snark(
+pub async fn verify_snark_from_storage(
     args: &VerifySnarkWrapperArgs,
 ) -> Result<(Fr, AuxOutputWitnessWrapper), String> {
-    println!("Verifying SNARK wrapped FRI proof.");
-
     let proof: L1BatchProofForL1 = proof_from_file(&args.l1_batch_proof_file);
-
-    let input = proof.scheduler_proof.inputs.clone();
-
-    let (_, serialized_proof) = serialize_proof(&proof.scheduler_proof);
-
-    let mut proof = L1BatchProofForL1 {
-        aggregation_result_coords: proof.aggregation_result_coords,
-        scheduler_proof: deserialize_proof(serialized_proof),
-    };
-
-    println!("=== Aux inputs:");
-    println!(
-        "  L1 msg linear hash:                  0x{:}",
-        hex::encode(proof.aggregation_result_coords[0])
-    );
-    println!(
-        "  Rollup state diff for compression:   0x{:}",
-        hex::encode(proof.aggregation_result_coords[1])
-    );
-    println!(
-        "  Bootloader heap initial content:     0x{:}",
-        hex::encode(proof.aggregation_result_coords[2])
-    );
-    println!(
-        "  Events queue state:                  0x{:}",
-        hex::encode(proof.aggregation_result_coords[3])
-    );
-
-    println!("=== Loading verification key.");
-    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
-    let vk_inner: VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> = serde_json::from_str(
-        &fs::read_to_string(args.snark_vk_scheduler_key_file.clone()).unwrap(),
-    )
-    .unwrap();
-
-    proof.scheduler_proof.n = vk_inner.n;
-    proof.scheduler_proof.inputs = input;
-
-    println!("Verifying the proof");
-    let is_valid =
-        verify::<_, _, RollingKeccakTranscript<Fr>>(&vk_inner, &proof.scheduler_proof, None)
-            .unwrap();
-
-    if !is_valid {
-        println!("Proof is {}", "INVALID".red());
-        return Err("Proof is not valid".to_owned());
-    } else {
-        println!("Proof is {}", "VALID".green());
-    };
-
-    // We expect only 1 public input.
-    assert!(
-        proof.scheduler_proof.inputs.len() == 1,
-        "Expected exactly 1 public input in the proof"
-    );
-
-    let public_input = proof.scheduler_proof.inputs[0];
-
-    println!("Public input is: {}", public_input);
-    let aux_witness = AuxOutputWitnessWrapper {
-        0 : circuit_definitions::zkevm_circuits::scheduler::block_header::BlockAuxilaryOutputWitness{
-            l1_messages_linear_hash:proof.aggregation_result_coords[0],
-            rollup_state_diff_for_compression: proof.aggregation_result_coords[1], bootloader_heap_initial_content: proof.aggregation_result_coords[2], events_queue_state: proof.aggregation_result_coords[3] },
-
-    };
-
-    Ok((public_input, aux_witness))
+    
+    verify_snark(
+        args.snark_vk_scheduler_key_file.clone(),
+        proof,
+        None
+    ).await
 }
 
 pub async fn generate_solidity_test(args: &GenerateSolidityTestArgs) -> Result<(), String> {
@@ -112,10 +49,10 @@ pub async fn generate_solidity_test(args: &GenerateSolidityTestArgs) -> Result<(
     Ok(())
 }
 
-pub async fn verify_snark_from_l1(
+pub async fn verify_snark(
     snark_vk_scheduler_key_file: String,
     mut proof: L1BatchProofForL1,
-    vk_hash_from_l1: H256,
+    vk_hash_from_l1: Option<H256>,
 ) -> Result<(Fr, AuxOutputWitnessWrapper), String> {
     println!("Verifying SNARK wrapped FRI proof.");
 
@@ -139,8 +76,10 @@ pub async fn verify_snark_from_l1(
 
     println!("=== Loading verification key.");
     use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
-    let vk_inner : circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> =
-        serde_json::from_str(&fs::read_to_string(snark_vk_scheduler_key_file.clone()).unwrap()).unwrap();
+    let vk_inner : VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> = serde_json::from_str(
+        &fs::read_to_string(snark_vk_scheduler_key_file.clone()).unwrap()
+    )
+    .unwrap();
 
     proof.scheduler_proof.n = vk_inner.n;
 
@@ -177,16 +116,22 @@ pub async fn verify_snark_from_l1(
     Ok((public_input, aux_witness))
 }
 
+/// Check that the hash of the verificattion key provided is equal to the supplied hash.
 fn check_verification_key(
     verification_key: VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit>,
-    vk_hash_from_l1: H256,
+    vk_hash_from_l1: Option<H256>,
 ) {
+    if vk_hash_from_l1.is_none() {
+        println!("Supplied vk hash is None, skipping check...");
+        return;
+    }
+
     let computed_vk_hash = calculate_verification_key_hash(verification_key);
 
     println!("=== Verification Key Hash Check:");
     println!(
         "  Verification Key Hash from L1:       0x{:}",
-        hex::encode(vk_hash_from_l1)
+        hex::encode(vk_hash_from_l1.unwrap())
     );
     println!(
         "  Computed Verification Key Hash:      0x{:}",
@@ -194,7 +139,7 @@ fn check_verification_key(
     );
 
     assert_eq!(
-        computed_vk_hash, vk_hash_from_l1,
+        computed_vk_hash, vk_hash_from_l1.unwrap(),
         "Make sure the verification key is updated."
     );
 }

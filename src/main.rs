@@ -19,7 +19,7 @@ use crate::contract::ContractConfig;
 use crate::inputs::generate_inputs;
 use crate::requests::L1BatchAndProofData;
 use crate::snark_wrapper_verifier::{
-    generate_solidity_test, verify_snark, verify_snark_from_l1, L1BatchProofForL1,
+    generate_solidity_test, L1BatchProofForL1, verify_snark_from_storage, verify_snark,
 };
 use crate::utils::update_verification_key_if_needed;
 pub mod block_header;
@@ -137,7 +137,7 @@ async fn main() {
     if let Some(command) = opt.command {
         // Expert commands
         let result = match command {
-            Commands::VerifySnarkWrapper(args) => verify_snark(&args).await.err(),
+            Commands::VerifySnarkWrapper(args) => verify_snark_from_storage(&args).await.err(),
             Commands::GenerateSolidityTest(args) => generate_solidity_test(&args).await.err(),
         };
         if let Some(error) = result {
@@ -194,10 +194,10 @@ async fn main() {
         batch_proof.scheduler_proof.inputs = inputs;
 
         // First, we verify that the proof itself is valid.
-        verify_snark_from_l1(
+        verify_snark(
             snark_vk_scheduler_key_file.to_string(),
             batch_proof,
-            vk_hash,
+            Some(vk_hash),
         )
         .await
         .unwrap();
@@ -237,7 +237,7 @@ mod test {
 
     #[tokio::test]
     async fn test_local_proof_v3() {
-        let (public_input, _) = verify_snark(&VerifySnarkWrapperArgs {
+        let (public_input, _) = verify_snark_from_storage(&VerifySnarkWrapperArgs {
             l1_batch_proof_file: "example_proofs/snark_wrapper/v3/l1_batch_proof_1.bin".to_string(),
             snark_vk_scheduler_key_file:
                 "example_proofs/snark_wrapper/v3/snark_verification_scheduler_key.json".to_string(),
