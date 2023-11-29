@@ -292,8 +292,10 @@ pub async fn fetch_batch_commit_tx(
     let domain;
     if network == "sepolia" {
         domain = "https://sepolia.era.zksync.dev"
-    } else {
+    } else if network == "mainnet" {
         domain = "https://mainnet.era.zksync.io"
+    } else {
+        domain = "https://testnet.era.zksync.dev"
     }
     let client = reqwest::Client::new();
 

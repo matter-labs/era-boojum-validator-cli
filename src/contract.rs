@@ -14,11 +14,12 @@ impl ContractConfig {
     pub fn new(l1_rpc_url: String, network: String) -> Self {
         use ethers::abi::Abi;
 
-        if network != "mainnet" && network != "sepolia" {
+        if network != "mainnet" && network != "sepolia" && network != "testnet" {
             panic!(
-                "Please use network name `{}` or `{}`",
+                "Please use network name `{}`, `{}`, or `{}`",
                 "mainnet".yellow(),
-                "sepolia".yellow()
+                "sepolia".yellow(),
+                "testnet".yellow()
             );
         }
 
@@ -78,10 +79,13 @@ pub fn get_diamond_proxy_address(network: String) -> Address {
         Address::from_str("32400084c286cf3e17e7b677ea9583e60a000324").unwrap()
     } else if network == "sepolia" {
         Address::from_str("74fba6cca06eed111e03719d6bfa26ae7680b3ea").unwrap()
+    } else if network == "testnet" {
+        Address::from_str("bac523d144bb6f8cd9c43617b610a04c16adb231").unwrap()
     } else {
         panic!(
-            "Please use network name `{}` or `{}`",
+            "Please use network name `{}`, `{}`, or `{}`",
             "mainnet".yellow(),
+            "sepolia".yellow(),
             "testnet".yellow()
         );
     }

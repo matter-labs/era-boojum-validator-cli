@@ -151,10 +151,11 @@ async fn main() {
     let network = opt.network.clone().to_string();
     let l1_rpc = opt.l1_rpc;
 
-    if network != "mainnet" && network != "sepolia" {
+    if network != "mainnet" && network != "sepolia" && network != "testnet" {
         println!(
-            "Please use network name `{}` or `{}`",
+            "Please use network name `{}`, `{}`, or `{}`",
             "mainnet".yellow(),
+            "sepolia".yellow(),
             "testnet".yellow()
         );
         return;
