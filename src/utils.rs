@@ -2,6 +2,7 @@ use std::{env, fs::File, io};
 
 const VERIFICATION_KEY_FILE_GITHUB: &str = "https://raw.githubusercontent.com/matter-labs/era-contracts/main/tools/data/scheduler_key.json";
 
+/// Checks to see if the verification key exists or an update has been requested and downloads it from github if needed.
 pub async fn update_verification_key_if_needed(update_verification_key: Option<bool>) {
     let file_path = "src/keys/scheduler_key.json";
     let file = env::current_dir().unwrap().join(file_path);

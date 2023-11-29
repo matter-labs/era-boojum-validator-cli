@@ -19,6 +19,7 @@ pub struct L1BatchProofForL1 {
     pub scheduler_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit>,
 }
 
+/// Pulls a SNARK proof from storage and verifies is with the supplied verification key.
 pub async fn verify_snark_from_storage(
     args: &VerifySnarkWrapperArgs,
 ) -> Result<(Fr, AuxOutputWitnessWrapper), String> {
@@ -49,6 +50,7 @@ pub async fn generate_solidity_test(args: &GenerateSolidityTestArgs) -> Result<(
     Ok(())
 }
 
+/// Verifies a SNARK proof with a given verification key, checking the verification key hash if a value is supplied.
 pub async fn verify_snark(
     snark_vk_scheduler_key_file: String,
     mut proof: L1BatchProofForL1,
