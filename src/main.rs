@@ -213,8 +213,6 @@ async fn main() {
 mod test {
     use crate::proof_from_file;
     use crate::requests::BatchL1Data;
-    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::pairing::bn256::Fr;
-    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::{Field, PrimeField};
     use zksync_types::H256;
 
     use super::*;
