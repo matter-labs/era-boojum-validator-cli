@@ -11,3 +11,6 @@ While the deserializer/verification key hashing is new, the [serialization code]
 
 # Callouts
 There are some fields that get ignored by the serialization process (inputs are separated from the proof itself, first 2 values in the `state_polys_openings_at_dilations` tuple, and first value in `gate_setup_openings_at_z` tuple). These values are thus hardcoded during deserializtion and, with the exception of inputs which come from other L1 state variables, the best guess is that they are either proven inherrently by other parts of the solidity verification and are double checked in some other way by the rust verifier or are hardcoded into the verification as well.
+
+## Verification Key
+The verification key being used in the test, found at [keys/scheduler_key.json](keys/scheduler_key.json), is the most up to date version of the verification key at the time of writing this. If we want to update this see the boojum cli validator[README](../README.md#cli-options). Once a new verification key is downloaded it will need to be copied over into the [keys folder](keys).
