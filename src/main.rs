@@ -281,32 +281,20 @@ mod test {
             curr_batch_commitment: H256::default(),
         };
 
-        println!("proof input: {:?}", public_input);
-
         let verifier_params = VerifierParams {
-            recursion_node_level_vk_hash: H256::from_str("0x5a3ef282b21e12fe1f4438e5bb158fc5060b160559c5158c6389d62d9fe3d080").unwrap().to_fixed_bytes(),
-            recursion_leaf_level_vk_hash: H256::from_str("0x14628525c227822148e718ca1138acfc6d25e759e19452455d89f7f610c3dcb8").unwrap().to_fixed_bytes(),
+            recursion_node_level_vk_hash: H256::from_str("5a3ef282b21e12fe1f4438e5bb158fc5060b160559c5158c6389d62d9fe3d080").unwrap().to_fixed_bytes(),
+            recursion_leaf_level_vk_hash: H256::from_str("14628525c227822148e718ca1138acfc6d25e759e19452455d89f7f610c3dcb8").unwrap().to_fixed_bytes(),
             recursion_circuits_set_vk_hash: [0u8; 32]
         };
 
         let result = generate_inputs(l1_data, verifier_params);
 
-        println!("computed proof input: {:?}", result);
+        println!("Computed proof input: {:?}", result[0]);
 
-        let mut recomputed_input = Fr::zero();
-        // Right now we go in reverse order, but it might be changed soon.
-        for i in 0..4 {
-            // 56 - as we only push 7 bytes.
-            for _ in 0..56 {
-                recomputed_input.double();
-            }
-            recomputed_input.add_assign(&Fr::from_str(&format!("{}", result[i])).unwrap());
-        }
-
-        assert_eq!(recomputed_input, public_input, "Public input doesn't match");
+        assert_eq!(result[0], public_input, "Public input doesn't match");
     }
-    #[test]
 
+    #[test]
     fn test_basic_proof() {
         // '10' is the id of the 'Storage Application' circuit (which is the one for which we have the basic_proof.bin)
         let key_10: ZkSyncBaseLayerStorage<VerificationKey<GoldilocksField, BaseProofsTreeHasher>> =
