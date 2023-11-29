@@ -1,18 +1,27 @@
 #![feature(array_chunks)]
+#![feature(slice_flatten)]
 
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use requests::{AuxOutputWitnessWrapper, BatchL1Data};
 use serde::Deserialize;
 use std::io::Read;
 use std::{fs::File, process};
-mod params;
+
+mod contract;
+mod inputs;
 mod requests;
 mod snark_wrapper_verifier;
+mod utils;
 
-use crate::snark_wrapper_verifier::{generate_solidity_test, verify_snark};
+use crate::contract::ContractConfig;
+use crate::inputs::generate_inputs;
+use crate::requests::L1BatchAndProofData;
+use crate::snark_wrapper_verifier::{
+    generate_solidity_test, L1BatchProofForL1, verify_snark_from_storage, verify_snark,
+};
+use crate::utils::update_verification_key_if_needed;
 pub mod block_header;
 
 use circuit_definitions::boojum::{
@@ -26,7 +35,7 @@ use circuit_definitions::circuit_definitions::{
     recursion_layer::{ZkSyncRecursionLayerProof, ZkSyncRecursionLayerStorage},
 };
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub enum FriProofWrapper {
     Base(ZkSyncBaseLayerProof),
     Recursive(ZkSyncRecursionLayerProof),
@@ -44,6 +53,9 @@ struct Cli {
     #[arg(long)]
     // RPC endpoint to use to fetch L1 information
     l1_rpc: Option<String>,
+    // Bool to request updating verification key
+    #[arg(long)]
+    update_verification_key: Option<bool>,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -79,6 +91,7 @@ pub fn proof_from_file<T: for<'a> Deserialize<'a>>(proof_path: &str) -> T {
     let proof: T = bincode::deserialize(buffer.as_slice()).unwrap();
     proof
 }
+
 fn get_scheduler_key_for_batch(batch_number: u64) -> &'static [u8] {
     match batch_number {
         1..=174710 => include_bytes!("keys/verification_scheduler_key.json"),
@@ -118,190 +131,13 @@ pub fn verify_scheduler_proof(
     }
 }
 
-/// Computes the public inputs for a given batch in a given network.
-/// Public inputs require us to fetch multiple data from the l1 (like state hash etc).
-pub async fn compute_public_inputs(
-    network: String,
-    batch_number: u64,
-    l1_rpc: Option<String>,
-) -> anyhow::Result<Vec<GoldilocksField>> {
-    // Loads verification keys.
-    // As our circuits change, the verification keys also change - so depending on the batch number, they might have different values.
-    let params = if network == "mainnet" {
-        self::params::get_mainnet_params_holder().get_for_index(batch_number as usize)
-    } else if network == "testnet" {
-        self::params::get_testnet_params_holder().get_for_index(batch_number as usize)
-    } else {
-        unreachable!();
-    };
-
-    let Some([leaf_layer_parameters_commitment, node_layer_vk_commitment]) = params else {
-        anyhow::bail!(format!("Can not get verification keys commitments for batch {}. Either it's too far in the past, or update the CLI", batch_number.to_string().yellow()));
-    };
-
-    println!("{}", "Fetching data from Ethereum L1 for state roots, bootloader and default Account Abstraction parameters".on_blue());
-
-    let l1_data = requests::fetch_l1_data(batch_number, &network, &l1_rpc.unwrap()).await;
-    if l1_data.is_err() {
-        if let Err(_err) = l1_data {
-            anyhow::bail!(format!("Failed to get data from L1: {}", _err));
-        }
-        anyhow::bail!("Failed to get data from L1");
-    }
-
-    let l1_data = l1_data.unwrap();
-
-    println!("{}", "Fetching auxilary block data".on_blue());
-    let aux_data = requests::fetch_aux_data_from_storage(batch_number, &network).await;
-    if aux_data.is_err() {
-        anyhow::bail!("Failed to get auxiliary data");
-    }
-    println!("\n");
-
-    // After fetching the data, we recreate the public input hash (for which we need information from current and previous block).
-
-    let aux_data = aux_data.unwrap();
-    create_input_internal(
-        l1_data,
-        aux_data,
-        leaf_layer_parameters_commitment,
-        node_layer_vk_commitment,
-        None,
-        None,
-    )
-    .await
-}
-
-pub async fn create_input_internal(
-    l1_data: BatchL1Data,
-    aux_data: AuxOutputWitnessWrapper,
-    leaf_layer_parameters_commitment: [GoldilocksField; 4],
-    node_layer_vk_commitment: [GoldilocksField; 4],
-    previous_block_meta_hash: Option<[u8; 32]>,
-    previous_block_aux_hash: Option<[u8; 32]>,
-) -> anyhow::Result<Vec<GoldilocksField>> {
-    // while we do not prove all the blocks we use placeholders for non-state related parts
-    // of the previous block
-    let previous_block_meta_hash = previous_block_meta_hash.unwrap_or([0u8; 32]);
-    let previous_block_aux_hash = previous_block_aux_hash.unwrap_or([0u8; 32]);
-
-    use self::block_header::*;
-    use sha3::{Digest, Keccak256};
-
-    let previous_passthrough_data = BlockPassthroughData {
-        per_shard_states: [
-            PerShardState {
-                enumeration_counter: l1_data.previous_enumeration_counter,
-                state_root: l1_data.previous_root.try_into().unwrap(),
-            },
-            // porter shard is not used
-            PerShardState {
-                enumeration_counter: 0,
-                state_root: [0u8; 32],
-            },
-        ],
-    };
-    let previous_passthrough_data_hash = to_fixed_bytes(
-        Keccak256::digest(&previous_passthrough_data.into_flattened_bytes()).as_slice(),
-    );
-
-    let previous_block_content_hash = BlockContentHeader::formal_block_hash_from_partial_hashes(
-        previous_passthrough_data_hash,
-        previous_block_meta_hash,
-        previous_block_aux_hash,
-    );
-
-    let new_passthrough_data = BlockPassthroughData {
-        per_shard_states: [
-            PerShardState {
-                enumeration_counter: l1_data.new_enumeration_counter,
-                state_root: l1_data.new_root.try_into().unwrap(),
-            },
-            // porter shard is not used
-            PerShardState {
-                enumeration_counter: 0,
-                state_root: [0u8; 32],
-            },
-        ],
-    };
-
-    let new_meta_params = BlockMetaParameters {
-        zkporter_is_available: false,
-        bootloader_code_hash: l1_data.bootloader_hash,
-        default_aa_code_hash: l1_data.default_aa_hash,
-    };
-
-    let aux_data = aux_data.0;
-
-    let new_aux_params = BlockAuxilaryOutput {
-        l1_messages_linear_hash: aux_data.l1_messages_linear_hash,
-        rollup_state_diff_for_compression: aux_data.rollup_state_diff_for_compression,
-        bootloader_heap_initial_content: aux_data.bootloader_heap_initial_content,
-        events_queue_state: aux_data.events_queue_state,
-    };
-
-    let new_header = BlockContentHeader {
-        block_data: new_passthrough_data,
-        block_meta: new_meta_params,
-        auxilary_output: new_aux_params,
-    };
-    let this_block_content_hash = new_header.into_formal_block_hash().0;
-
-    let mut flattened_public_input = vec![];
-    flattened_public_input.extend(previous_block_content_hash);
-    flattened_public_input.extend(this_block_content_hash);
-    // recursion parameters, for now hardcoded
-
-    let mut recursion_node_verification_key_hash = [0u8; 32];
-    for (dst, src) in recursion_node_verification_key_hash
-        .array_chunks_mut::<8>()
-        .zip(node_layer_vk_commitment.iter())
-    {
-        let le_bytes = src.to_reduced_u64().to_le_bytes();
-        dst.copy_from_slice(&le_bytes[..]);
-        dst.reverse();
-    }
-
-    let mut leaf_layer_parameters_hash = [0u8; 32];
-    for (dst, src) in leaf_layer_parameters_hash
-        .array_chunks_mut::<8>()
-        .zip(leaf_layer_parameters_commitment.iter())
-    {
-        let le_bytes = src.to_reduced_u64().to_le_bytes();
-        dst.copy_from_slice(&le_bytes[..]);
-        dst.reverse();
-    }
-
-    flattened_public_input.extend(recursion_node_verification_key_hash);
-    flattened_public_input.extend(leaf_layer_parameters_hash);
-
-    let input_keccak_hash = to_fixed_bytes(Keccak256::digest(&flattened_public_input).as_slice());
-
-    let mut public_inputs = vec![];
-    use circuit_definitions::boojum::field::PrimeField;
-    use circuit_definitions::boojum::field::U64Representable;
-    use circuit_definitions::zkevm_circuits::scheduler::NUM_SCHEDULER_PUBLIC_INPUTS;
-    let take_by = GoldilocksField::CAPACITY_BITS / 8;
-
-    for chunk in input_keccak_hash
-        .chunks_exact(take_by)
-        .take(NUM_SCHEDULER_PUBLIC_INPUTS)
-    {
-        let mut buffer = [0u8; 8];
-        buffer[1..].copy_from_slice(chunk);
-        let as_field_element = GoldilocksField::from_u64_unchecked(u64::from_be_bytes(buffer));
-        public_inputs.push(as_field_element);
-    }
-    Ok(public_inputs)
-}
-
 #[tokio::main]
 async fn main() {
     let opt = Cli::parse();
     if let Some(command) = opt.command {
         // Expert commands
         let result = match command {
-            Commands::VerifySnarkWrapper(args) => verify_snark(&args).await.err(),
+            Commands::VerifySnarkWrapper(args) => verify_snark_from_storage(&args).await.err(),
             Commands::GenerateSolidityTest(args) => generate_solidity_test(&args).await.err(),
         };
         if let Some(error) = result {
@@ -315,35 +151,19 @@ async fn main() {
     let network = opt.network.clone().to_string();
     let l1_rpc = opt.l1_rpc;
 
-    if network != "mainnet" && network != "testnet" {
+    if network != "mainnet" && network != "sepolia" && network != "testnet" {
         println!(
-            "Please use network name `{}` or `{}`",
+            "Please use network name `{}`, `{}`, or `{}`",
             "mainnet".yellow(),
+            "sepolia".yellow(),
             "testnet".yellow()
         );
         return;
     }
 
+    update_verification_key_if_needed(opt.update_verification_key).await;
+
     println!("{}", "Fetching and validating the proof itself".on_blue());
-
-    let proof_response = requests::fetch_proof_from_storage(batch_number, &network).await;
-
-    if let Err(_err) = proof_response {
-        println!("{}", _err);
-        return;
-    }
-    let proof_path = proof_response.unwrap();
-
-    // First, we verify that the proof itself is valid.
-    let valid_public_inputs = verify_scheduler_proof(&proof_path, batch_number);
-    if valid_public_inputs.is_err() {
-        println!("Proof is {}", "INVALID".red());
-        return;
-    } else {
-        println!("Proof is {}", "VALID".green());
-    }
-    println!("\n");
-
     if l1_rpc.is_none() {
         println!(
             "{}",
@@ -351,35 +171,40 @@ async fn main() {
                 .yellow()
         );
     } else {
-        // Then we verify the public inputs (that contain the circuit code, prev and next root hash etc)
-        // To make sure that the proof is matching a correct computation.
+        let contract = ContractConfig::new(l1_rpc.clone().unwrap(), network.clone());
 
-        let public_inputs = compute_public_inputs(network, batch_number, l1_rpc)
-            .await
-            .unwrap();
+        let L1BatchAndProofData {
+            aux_output,
+            scheduler_proof,
+            batch_l1_data,
+            verifier_params,
+            block_number,
+        } = requests::fetch_l1_data(batch_number, &network, &l1_rpc.clone().unwrap()).await;
 
-        let valid_public_inputs = valid_public_inputs.unwrap();
+        let vk_hash = contract.get_verification_key_hash(block_number).await;
 
-        println!(
-            "{} ",
-            "Comparing public input from Ethereum with input for boojum".on_blue()
-        );
-        println!(
-            "Recomputed public input from current prover using L1 data is {}",
-            format!("{:?}", public_inputs).bright_blue()
-        );
-        println!(
-            "Boojum proof's public input is {}",
-            format!("{:?}", valid_public_inputs).green()
-        );
+        let snark_vk_scheduler_key_file = "src/keys/scheduler_key.json";
 
-        if public_inputs == valid_public_inputs {
-            println!("Boojum's proof is {}", "VALID".green());
-        } else {
-            println!("Boojum's proof is {}", "INVALID".red());
-        }
-        return;
-    }
+        let mut batch_proof = L1BatchProofForL1 {
+            aggregation_result_coords: aux_output.prepare_aggregation_result_coords(),
+            scheduler_proof,
+        };
+
+        let inputs = generate_inputs(batch_l1_data, verifier_params);
+
+        batch_proof.scheduler_proof.inputs = inputs;
+
+        // First, we verify that the proof itself is valid.
+        verify_snark(
+            snark_vk_scheduler_key_file.to_string(),
+            batch_proof,
+            Some(vk_hash),
+        )
+        .await
+        .unwrap();
+
+        println!("\n");
+    };
 
     println!("\n");
 }
@@ -387,10 +212,9 @@ async fn main() {
 #[cfg(test)]
 
 mod test {
-    use crate::params::{to_goldilocks, CIRCUIT_V5};
     use crate::proof_from_file;
-    use circuit_definitions::franklin_crypto::bellman::pairing::bn256::Fr;
-    use circuit_definitions::franklin_crypto::bellman::{Field, PrimeField};
+    use crate::requests::BatchL1Data;
+    use zksync_types::H256;
 
     use super::*;
     use circuit_definitions::{
@@ -402,164 +226,17 @@ mod test {
         ZkSyncDefaultRoundFunction,
     };
     use colored::Colorize;
+    use std::str::FromStr;
+    use block_header::VerifierParams;
+
     #[test]
     fn test_scheduler_proof() {
         verify_scheduler_proof("example_proofs/proof_52272951.bin", 52272951).expect("FAILED");
     }
 
     #[tokio::test]
-    async fn test_local_proof() {
-        let (public_input, aux_witness) = verify_snark(&VerifySnarkWrapperArgs {
-            l1_batch_proof_file: "example_proofs/snark_wrapper/l1_batch_proof_1.bin".to_string(),
-            snark_vk_scheduler_key_file:
-                "example_proofs/snark_wrapper/snark_verification_scheduler_key.json".to_string(),
-        })
-        .await
-        .unwrap();
-
-        let bootloader_code =
-            hex::decode("01000923e7c6e9e116c813f5e9b45eda88e3892d9150839bd6004c2df1846d46")
-                .unwrap();
-        let mut bootloader_code_array = [0u8; 32];
-        bootloader_code_array.copy_from_slice(&bootloader_code);
-
-        let default_aa_code =
-            hex::decode("0100067d70019d4919b5c8423df00fa89a5c53e734bccc1ad4a92e99df7474ab")
-                .unwrap();
-        let mut default_aa_array = [0u8; 32];
-        default_aa_array.copy_from_slice(&default_aa_code);
-
-        let prev_enum_counter = 23;
-        let prev_root =
-            hex::decode("38a3e641bf44aca21abf4cdfa2cac66cd1f222149e24105f6bfac98e0fc87503")
-                .unwrap();
-
-        let enum_counter = 83;
-        let root = hex::decode("0557c172fdfa63645c318a741c7c53b38a8fcf12421d8d4ce311e4e633dbcafb")
-            .unwrap();
-
-        let [leaf_layer_parameters_commitment, node_layer_vk_commitment] =
-            to_goldilocks(CIRCUIT_V5);
-        let l1_data = BatchL1Data {
-            previous_enumeration_counter: prev_enum_counter,
-            previous_root: prev_root,
-            new_enumeration_counter: enum_counter,
-            new_root: root,
-            default_aa_hash: default_aa_array,
-            bootloader_hash: bootloader_code_array,
-        };
-
-        println!("proof input: {:?}", public_input);
-
-        let result = create_input_internal(
-            l1_data,
-            aux_witness,
-            leaf_layer_parameters_commitment,
-            node_layer_vk_commitment,
-            None,
-            None,
-        )
-        .await;
-        println!("computed proof input: {:?}", result);
-
-        let r = result.unwrap();
-        let mut recomputed_input = Fr::zero();
-        // Right now we go in reverse order, but it might be changed soon.
-        for i in (0..4).rev() {
-            // 56 - as we only push 7 bytes.
-            for _ in 0..56 {
-                recomputed_input.double();
-            }
-            recomputed_input.add_assign(&Fr::from_str(&format!("{}", r[i].0)).unwrap());
-        }
-
-        assert_eq!(recomputed_input, public_input, "Public input doesn't match");
-    }
-
-    // this is the proof with fixed public input computation - that includes the full previous block commitment.
-    #[tokio::test]
-    async fn test_local_proof_v2() {
-        let (public_input, aux_witness) = verify_snark(&VerifySnarkWrapperArgs {
-            l1_batch_proof_file: "example_proofs/snark_wrapper/v2/l1_batch_proof_1.bin".to_string(),
-            snark_vk_scheduler_key_file:
-                "example_proofs/snark_wrapper/v2/snark_verification_scheduler_key.json".to_string(),
-        })
-        .await
-        .unwrap();
-
-        // select bootloader_code_hash from protocol_versions
-        let bootloader_code =
-            hex::decode("010009416e909e0819593a9806bbc841d25c5cdfed3f4a1523497c6814e5194a")
-                .unwrap();
-        let mut bootloader_code_array = [0u8; 32];
-        bootloader_code_array.copy_from_slice(&bootloader_code);
-
-        // select default_account_code_hash from protocol_versions
-        let default_aa_code =
-            hex::decode("0100065d134a862a777e50059f5e0fbe68b583f3617a67820f7edda0d7f253a0")
-                .unwrap();
-        let mut default_aa_array = [0u8; 32];
-        default_aa_array.copy_from_slice(&default_aa_code);
-
-        // select rollout_last_leaf_incex form l1_batches;
-        let prev_enum_counter = 23;
-        // select merkle root hash
-        let prev_root =
-            hex::decode("16914ac26bb9cafa0f1dfaeaab10745a9094e1b60c7076fedf21651d6a25b574")
-                .unwrap();
-
-        let enum_counter = 84;
-        let root = hex::decode("9cf7bb72401a56039ca097cabed20a72221c944ed9b0e515c083c04663ab45a6")
-            .unwrap();
-
-        let [leaf_layer_parameters_commitment, node_layer_vk_commitment] =
-            to_goldilocks(CIRCUIT_V5);
-        let l1_data = BatchL1Data {
-            previous_enumeration_counter: prev_enum_counter,
-            previous_root: prev_root,
-            new_enumeration_counter: enum_counter,
-            new_root: root,
-            default_aa_hash: default_aa_array,
-            bootloader_hash: bootloader_code_array,
-        };
-
-        let previous_meta_hash =
-            hex::decode("224e9e504599641655d4041e3776f362d10ea59965bfd2c78c05d8dc5b16ef8e")
-                .unwrap();
-        let previous_aux_hash =
-            hex::decode("7c613c82ec911cf56dd6241854dd87bd538e0201f4ff0735f56a1a013db6466a")
-                .unwrap();
-
-        println!("proof input: {:?}", public_input);
-
-        let result = create_input_internal(
-            l1_data,
-            aux_witness,
-            leaf_layer_parameters_commitment,
-            node_layer_vk_commitment,
-            Some(previous_meta_hash.try_into().unwrap()),
-            Some(previous_aux_hash.try_into().unwrap()),
-        )
-        .await;
-        println!("computed proof input: {:?}", result);
-
-        let r = result.unwrap();
-        let mut recomputed_input = Fr::zero();
-        // Right now we go in reverse order, but it might be changed soon.
-        for i in (0..4).rev() {
-            // 56 - as we only push 7 bytes.
-            for _ in 0..56 {
-                recomputed_input.double();
-            }
-            recomputed_input.add_assign(&Fr::from_str(&format!("{}", r[i].0)).unwrap());
-        }
-
-        assert_eq!(recomputed_input, public_input, "Public input doesn't match");
-    }
-
-    #[tokio::test]
     async fn test_local_proof_v3() {
-        let (public_input, aux_witness) = verify_snark(&VerifySnarkWrapperArgs {
+        let (public_input, _) = verify_snark_from_storage(&VerifySnarkWrapperArgs {
             l1_batch_proof_file: "example_proofs/snark_wrapper/v3/l1_batch_proof_1.bin".to_string(),
             snark_vk_scheduler_key_file:
                 "example_proofs/snark_wrapper/v3/snark_verification_scheduler_key.json".to_string(),
@@ -592,8 +269,6 @@ mod test {
         let root = hex::decode("9cf7bb72401a56039ca097cabed20a72221c944ed9b0e515c083c04663ab45a6")
             .unwrap();
 
-        let [leaf_layer_parameters_commitment, node_layer_vk_commitment] =
-            to_goldilocks(CIRCUIT_V5);
         let l1_data = BatchL1Data {
             previous_enumeration_counter: prev_enum_counter,
             previous_root: prev_root,
@@ -601,43 +276,24 @@ mod test {
             new_root: root,
             default_aa_hash: default_aa_array,
             bootloader_hash: bootloader_code_array,
+            prev_batch_commitment: H256::default(),
+            curr_batch_commitment: H256::default(),
         };
 
-        let previous_meta_hash =
-            hex::decode("224e9e504599641655d4041e3776f362d10ea59965bfd2c78c05d8dc5b16ef8e")
-                .unwrap();
-        let previous_aux_hash =
-            hex::decode("7c613c82ec911cf56dd6241854dd87bd538e0201f4ff0735f56a1a013db6466a")
-                .unwrap();
+        let verifier_params = VerifierParams {
+            recursion_node_level_vk_hash: H256::from_str("5a3ef282b21e12fe1f4438e5bb158fc5060b160559c5158c6389d62d9fe3d080").unwrap().to_fixed_bytes(),
+            recursion_leaf_level_vk_hash: H256::from_str("14628525c227822148e718ca1138acfc6d25e759e19452455d89f7f610c3dcb8").unwrap().to_fixed_bytes(),
+            recursion_circuits_set_vk_hash: [0u8; 32]
+        };
 
-        println!("proof input: {:?}", public_input);
+        let result = generate_inputs(l1_data, verifier_params);
 
-        let result = create_input_internal(
-            l1_data,
-            aux_witness,
-            leaf_layer_parameters_commitment,
-            node_layer_vk_commitment,
-            Some(previous_meta_hash.try_into().unwrap()),
-            Some(previous_aux_hash.try_into().unwrap()),
-        )
-        .await;
-        println!("computed proof input: {:?}", result);
+        println!("Computed proof input: {:?}", result[0]);
 
-        let r = result.unwrap();
-        let mut recomputed_input = Fr::zero();
-        // Right now we go in reverse order, but it might be changed soon.
-        for i in (0..4) {
-            // 56 - as we only push 7 bytes.
-            for _ in 0..56 {
-                recomputed_input.double();
-            }
-            recomputed_input.add_assign(&Fr::from_str(&format!("{}", r[i].0)).unwrap());
-        }
-
-        assert_eq!(recomputed_input, public_input, "Public input doesn't match");
+        assert_eq!(result[0], public_input, "Public input doesn't match");
     }
-    #[test]
 
+    #[test]
     fn test_basic_proof() {
         // '10' is the id of the 'Storage Application' circuit (which is the one for which we have the basic_proof.bin)
         let key_10: ZkSyncBaseLayerStorage<VerificationKey<GoldilocksField, BaseProofsTreeHasher>> =

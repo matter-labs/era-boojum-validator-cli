@@ -2,31 +2,65 @@ use std::fs;
 
 use crate::requests::AuxOutputWitnessWrapper;
 use crate::{proof_from_file, GenerateSolidityTestArgs, VerifySnarkWrapperArgs};
-use circuit_definitions::franklin_crypto::bellman::pairing::bn256::{Bn256, Fr};
-use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::pairing::bn256::{Bn256, Fr};
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
 use circuit_definitions::{
     circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit,
-    franklin_crypto::bellman::plonk::commitments::transcript::keccak_transcript::RollingKeccakTranscript,
+    snark_wrapper::franklin_crypto::bellman::plonk::commitments::transcript::keccak_transcript::RollingKeccakTranscript,
 };
 use colored::Colorize;
+use crypto::calculate_verification_key_hash;
+use primitive_types::H256;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct L1BatchProofForL1 {
     pub aggregation_result_coords: [[u8; 32]; 4],
-    //pub scheduler_proof: Proof<Bn256, ZkSyncCircuit<Bn256, VmWitnessOracle<Bn256>>>,
     pub scheduler_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit>,
 }
 
-pub async fn verify_snark(
+/// Pulls a SNARK proof from storage and verifies is with the supplied verification key.
+pub async fn verify_snark_from_storage(
     args: &VerifySnarkWrapperArgs,
+) -> Result<(Fr, AuxOutputWitnessWrapper), String> {
+    let proof: L1BatchProofForL1 = proof_from_file(&args.l1_batch_proof_file);
+    
+    verify_snark(
+        args.snark_vk_scheduler_key_file.clone(),
+        proof,
+        None
+    ).await
+}
+
+pub async fn generate_solidity_test(args: &GenerateSolidityTestArgs) -> Result<(), String> {
+    let proof: L1BatchProofForL1 = proof_from_file(&args.l1_batch_proof_file);
+
+    let (inputs, serialized_proof) = codegen::serialize_proof(&proof.scheduler_proof);
+
+    println!("const PROOF = {{");
+    println!("    publicInputs: ['0x{:x}'],", inputs[0]);
+    println!("    serializedProof: [");
+    for p in serialized_proof {
+        println!("        '0x{:x}',", p);
+    }
+
+    println!("],");
+
+    println!("recursiveAggregationInput: [] \n }};");
+    Ok(())
+}
+
+/// Verifies a SNARK proof with a given verification key, checking the verification key hash if a value is supplied.
+pub async fn verify_snark(
+    snark_vk_scheduler_key_file: String,
+    mut proof: L1BatchProofForL1,
+    vk_hash_from_l1: Option<H256>,
 ) -> Result<(Fr, AuxOutputWitnessWrapper), String> {
     println!("Verifying SNARK wrapped FRI proof.");
 
-    let proof: L1BatchProofForL1 = proof_from_file(&args.l1_batch_proof_file);
-
     println!("=== Aux inputs:");
     println!(
-        "  L1 msg linead hash:                  0x{:}",
+        "  L1 msg linear hash:                  0x{:}",
         hex::encode(proof.aggregation_result_coords[0])
     );
     println!(
@@ -43,9 +77,15 @@ pub async fn verify_snark(
     );
 
     println!("=== Loading verification key.");
-    use circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
-    let vk_inner : circuit_definitions::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> =
-        serde_json::from_str(&fs::read_to_string(args.snark_vk_scheduler_key_file.clone()).unwrap()).unwrap();
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
+    let vk_inner : VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> = serde_json::from_str(
+        &fs::read_to_string(snark_vk_scheduler_key_file.clone()).unwrap()
+    )
+    .unwrap();
+
+    proof.scheduler_proof.n = vk_inner.n;
+
+    check_verification_key(vk_inner.clone(), vk_hash_from_l1);
 
     println!("Verifying the proof");
     let is_valid =
@@ -67,7 +107,7 @@ pub async fn verify_snark(
 
     let public_input = proof.scheduler_proof.inputs[0];
 
-    println!("Private input is: {:?}", public_input);
+    println!("Public input is: {}", public_input);
     let aux_witness = AuxOutputWitnessWrapper {
         0 : circuit_definitions::zkevm_circuits::scheduler::block_header::BlockAuxilaryOutputWitness{
             l1_messages_linear_hash:proof.aggregation_result_coords[0],
@@ -78,20 +118,30 @@ pub async fn verify_snark(
     Ok((public_input, aux_witness))
 }
 
-pub async fn generate_solidity_test(args: &GenerateSolidityTestArgs) -> Result<(), String> {
-    let proof: L1BatchProofForL1 = proof_from_file(&args.l1_batch_proof_file);
-
-    let (inputs, serialized_proof) = codegen::serialize_proof(&proof.scheduler_proof);
-
-    println!("const PROOF = {{");
-    println!("    publicInputs: ['0x{:x}'],", inputs[0]);
-    println!("    serializedProof: [");
-    for p in serialized_proof {
-        println!("        '0x{:x}',", p);
+/// Check that the hash of the verificattion key provided is equal to the supplied hash.
+fn check_verification_key(
+    verification_key: VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit>,
+    vk_hash_from_l1: Option<H256>,
+) {
+    if vk_hash_from_l1.is_none() {
+        println!("Supplied vk hash is None, skipping check...");
+        return;
     }
 
-    println!("],");
+    let computed_vk_hash = calculate_verification_key_hash(verification_key);
 
-    println!("recursiveAggregationInput: [] \n }};");
-    Ok(())
+    println!("=== Verification Key Hash Check:");
+    println!(
+        "  Verification Key Hash from L1:       0x{:}",
+        hex::encode(vk_hash_from_l1.unwrap())
+    );
+    println!(
+        "  Computed Verification Key Hash:      0x{:}",
+        hex::encode(computed_vk_hash)
+    );
+
+    assert_eq!(
+        computed_vk_hash, vk_hash_from_l1.unwrap(),
+        "Make sure the verification key is updated."
+    );
 }

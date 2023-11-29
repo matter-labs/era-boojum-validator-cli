@@ -1,88 +1,34 @@
+use std::process;
+use std::str::FromStr;
+
 use circuit_definitions::boojum::field::goldilocks::GoldilocksField;
-use ethers::abi::Function;
-use std::fs;
-use std::io::Cursor;
+use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::bn256::Bn256;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
+use crypto::deserialize_proof;
+use ethers::abi::{Function, Abi, Token};
+use ethers::types::TxHash;
+use ethers::contract::BaseContract;
+use ethers::providers::{Provider, Http, Middleware};
+use once_cell::sync::Lazy;
+use zksync_types::{ethabi, H256};
+use primitive_types::U256;
+use colored::Colorize;
 
-pub enum StorageDataType {
-    Proof,
-    AuxData,
-}
+use crate::block_header::{self, BlockAuxilaryOutput, VerifierParams};
+use crate::contract::get_diamond_proxy_address;
+use crate::snark_wrapper_verifier::L1BatchProofForL1;
 
-/// Fetches data from Google cloud and caches it locally.
-pub async fn fetch_data_from_storage(
-    data_type: StorageDataType,
-    batch_number: u64,
-    network: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let (expected_file_path, url) = match data_type {
-        StorageDataType::Proof => (
-            format!("./downloaded_data/proof_{}_{}.bin", network, batch_number),
-            format!(
-                "https://storage.googleapis.com/zksync-era-{}-proofs/proofs_fri/proof_{}.bin",
-                network, batch_number
-            )
-        ),
-        StorageDataType::AuxData => (
-            format!("./downloaded_data/aux_{}_{}.bin", network, batch_number),
-            format!("https://storage.googleapis.com/zksync-era-{}-proofs/scheduler_witness_jobs_fri/aux_output_witness_{}.bin", network, batch_number)
-        )
-    };
-
-    let path = std::path::Path::new(&expected_file_path);
-    if path.exists() {
-        return Ok(expected_file_path);
-    }
-
-    let client = reqwest::Client::new();
-    let data = client.get(url).send().await?;
-
-    if data.status().is_success() {
-        fs::create_dir_all("./downloaded_data")?;
-
-        let mut file = std::fs::File::create(expected_file_path.clone())?;
-        let mut content = Cursor::new(data.bytes().await?);
-        std::io::copy(&mut content, &mut file)?;
-
-        return Ok(expected_file_path);
-    } else {
-        return Err(format!(
-            "Data for batch {} on network {} not found",
-            batch_number, network
-        )
-        .into());
-    }
-}
-
-/// Download the proof file if it exists and saves locally
-pub async fn fetch_proof_from_storage(
-    batch_number: u64,
-    network: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
-    println!(
-        "Downloading proof for batch {} on network {}",
-        batch_number, network
-    );
-
-    fetch_data_from_storage(StorageDataType::Proof, batch_number, network).await
-}
-
-/// Download the proof file if it exists and saves locally
-pub async fn fetch_aux_data_from_storage(
-    batch_number: u64,
-    network: &str,
-) -> Result<AuxOutputWitnessWrapper, Box<dyn std::error::Error>> {
-    println!(
-        "Downloading aux data for batch {} on network {}",
-        batch_number, network
-    );
-
-    let aux_path = fetch_data_from_storage(StorageDataType::AuxData, batch_number, network).await;
-
-    let bytes = std::fs::read(aux_path.unwrap())?;
-
-    let result: AuxOutputWitnessWrapper = bincode::deserialize(&bytes[..]).unwrap();
-    Ok(result)
-}
+pub static BLOCK_COMMIT_EVENT_SIGNATURE: Lazy<H256> = Lazy::new(|| {
+    ethabi::long_signature(
+        "BlockCommit",
+        &[
+            ethabi::ParamType::Uint(256),
+            ethabi::ParamType::FixedBytes(32),
+            ethabi::ParamType::FixedBytes(32),
+        ],
+    )
+});
 
 #[derive(Debug)]
 pub struct BatchL1Data {
@@ -96,6 +42,16 @@ pub struct BatchL1Data {
     pub default_aa_hash: [u8; 32],
     // Hash of the bootloader.yul code.
     pub bootloader_hash: [u8; 32],
+    pub prev_batch_commitment: H256,
+    pub curr_batch_commitment: H256,
+}
+
+pub struct L1BatchAndProofData {
+    pub batch_l1_data: BatchL1Data,
+    pub aux_output: BlockAuxilaryOutput,
+    pub scheduler_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit>,
+    pub verifier_params: VerifierParams,
+    pub block_number: u64,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -105,34 +61,45 @@ pub struct AuxOutputWitnessWrapper(
     >,
 );
 
-pub async fn fetch_l1_data(
+pub async fn fetch_l1_data(batch_number: u64, network: &str, rpc_url: &str) -> L1BatchAndProofData {
+    let commit_data = fetch_l1_commit_data(batch_number, network, rpc_url).await;
+    if commit_data.is_err() {
+        panic!("Failed to get data from L1");
+    }
+
+    let (batch_l1_data, aux_output) = commit_data.unwrap();
+
+    let (proof_data, block_number) = fetch_proof_from_l1(batch_number, network, rpc_url).await;
+    let verifier_params = fetch_verifier_param_from_l1(block_number, network, rpc_url).await;
+
+    L1BatchAndProofData {
+        batch_l1_data,
+        aux_output,
+        scheduler_proof: proof_data.scheduler_proof,
+        verifier_params,
+        block_number,
+    }
+}
+
+pub async fn fetch_l1_commit_data(
     batch_number: u64,
     network: &str,
     rpc_url: &str,
-) -> Result<BatchL1Data, String> {
-    use colored::Colorize;
-    use ethers::abi::Abi;
-    use ethers::prelude::*;
-    use std::str::FromStr;
-
-    #[allow(non_snake_case)]
-    let DIAMOND_PROXY = if network.to_string() == "mainnet" {
-        "32400084c286cf3e17e7b677ea9583e60a000324"
-    } else {
-        "1908e2BF4a88F91E4eF0DC72f02b8Ea36BEa2319"
-    };
-
+) -> Result<(BatchL1Data, BlockAuxilaryOutput), String> {
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
-    let function = contract_abi.functions_by_name("commitBlocks").unwrap()[0].clone();
+    let function: Function = contract_abi.functions_by_name("commitBatches").unwrap()[0].clone();
     let previous_batch_number = batch_number - 1;
-    let address = Address::from_str(DIAMOND_PROXY).unwrap();
+    let address = get_diamond_proxy_address(network.to_string());
 
     let mut roots = vec![];
     let mut l1_block_number = 0;
+    let mut calldata = vec![];
+    let mut prev_batch_commitment = H256::default();
+    let mut curr_batch_commitment = H256::default();
     for b_number in [previous_batch_number, batch_number] {
-        let commit_tx = fetch_batch_commit_tx(b_number, network)
+        let (commit_tx, _) = fetch_batch_commit_tx(b_number, network)
             .await
             .map_err(|_| format!("failed to find commit transaction for block {}", b_number))
             .unwrap();
@@ -143,15 +110,45 @@ pub async fn fetch_l1_data(
             .map_err(|_| format!("failed to find commit transaction for block {}", b_number))?
             .unwrap();
         l1_block_number = tx.block_number.unwrap().as_u64();
-        let calldata = tx.input.to_vec();
+        calldata = tx.input.to_vec();
 
         let found_data = find_state_data_from_log(b_number, &function, &calldata);
         if found_data.is_none() {
             panic!("invalid log from L1 for block {}", b_number);
         }
 
+        let batch_commitment = client
+            .get_transaction_receipt(tx.hash)
+            .await
+            .map_err(|_| format!("failed to get transaction receipt for hash {}", tx.hash))?
+            .unwrap()
+            .logs
+            .iter()
+            .find(|log| {
+                log.address == address
+                    && log.topics.len() == 4
+                    && log.topics[0] == *BLOCK_COMMIT_EVENT_SIGNATURE
+                    && log.topics[1] == H256::from_low_u64_be(b_number)
+            })
+            .map(|log| log.topics[3]);
+
+        if batch_commitment.is_none() {
+            panic!(
+                "failed to get batch commitment for batch {}",
+                &b_number.to_string()
+            )
+        }
+
+        if b_number == previous_batch_number {
+            prev_batch_commitment = batch_commitment.unwrap();
+        } else {
+            curr_batch_commitment = batch_commitment.unwrap();
+        }
+
         roots.push(found_data.unwrap());
     }
+
+    let aux_output = block_header::parse_aux_data(&function, &calldata);
 
     assert_eq!(roots.len(), 2);
 
@@ -194,9 +191,87 @@ pub async fn fetch_l1_data(
         new_root,
         bootloader_hash: *bootloader_code_hash.as_fixed_bytes(),
         default_aa_hash: *default_aa_code_hash.as_fixed_bytes(),
+        prev_batch_commitment,
+        curr_batch_commitment,
     };
 
-    Ok(result)
+    Ok((result, aux_output))
+}
+
+pub async fn fetch_proof_from_l1(
+    batch_number: u64,
+    network: &str,
+    rpc_url: &str,
+) -> (L1BatchProofForL1, u64) {
+
+    let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
+
+    let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
+    let function = contract_abi.functions_by_name("proveBatches").unwrap()[0].clone();
+
+    let (_, prove_tx) = fetch_batch_commit_tx(batch_number, network)
+        .await
+        .map_err(|_| {
+            format!(
+                "failed to find commit transaction for block {}",
+                batch_number
+            )
+        })
+        .unwrap();
+
+    let tx = client
+        .get_transaction(TxHash::from_str(&prove_tx).unwrap())
+        .await
+        .map_err(|_| {
+            format!(
+                "failed to find prove transaction for block {}",
+                batch_number
+            )
+        })
+        .unwrap()
+        .unwrap();
+
+    let l1_block_number = tx.block_number.unwrap().as_u64();
+    let calldata = tx.input.to_vec();
+
+    let parsed_input = function.decode_input(&calldata[4..]).unwrap();
+
+    assert_eq!(parsed_input.len(), 3);
+    let [_, _, Token::Tuple(proof)] = parsed_input.as_slice() else {
+        panic!("Invalid tuple types");
+    };
+
+    assert_eq!(proof.len(), 2);
+
+    let Token::Array(serialized_proof) = proof[1].clone() else {
+        panic!();
+    };
+
+    let proof = serialized_proof
+        .iter()
+        .filter_map(|e| {
+            if let Token::Uint(x) = e {
+                Some(x.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<U256>>();
+    
+    if network != "mainnet" && serialized_proof.len() == 0 {
+        let msg = format!("Proof doesn't exist for batch {} on network {}, exiting...", batch_number.to_string().red(), network.red());
+        println!("{}", msg);
+        process::exit(0);
+    }
+
+    let x: Proof<Bn256, ZkSyncSnarkWrapperCircuit> = deserialize_proof(proof);
+    (
+        L1BatchProofForL1 {
+            aggregation_result_coords: [[0u8; 32]; 4],
+            scheduler_proof: x,
+        },
+        l1_block_number,
+    )
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -208,23 +283,26 @@ pub struct JSONL2RPCResponse {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct L1BatchJson {
     commitTxHash: String,
+    proveTxHash: String,
 }
 
 // Fetches given batch information from Era RPC
 pub async fn fetch_batch_commit_tx(
     batch_number: u64,
     network: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<(String, String), Box<dyn std::error::Error>> {
     println!(
         "Fetching batch {} information from zkSync Era on network {}",
         batch_number, network
     );
 
     let domain;
-    if network == "testnet" {
-        domain = "https://testnet.era.zksync.dev"
-    } else {
+    if network == "sepolia" {
+        domain = "https://sepolia.era.zksync.dev"
+    } else if network == "mainnet" {
         domain = "https://mainnet.era.zksync.io"
+    } else {
+        domain = "https://testnet.era.zksync.dev"
     }
     let client = reqwest::Client::new();
 
@@ -245,7 +323,7 @@ pub async fn fetch_batch_commit_tx(
 
     if response.status().is_success() {
         let json = response.json::<JSONL2RPCResponse>().await?;
-        return Ok(json.result.commitTxHash);
+        return Ok((json.result.commitTxHash, json.result.proveTxHash));
     } else {
         return Err(format!(
             "Failed to fetch information from zkSync Era RPC for batch {} on network {}",
@@ -315,4 +393,34 @@ fn find_state_data_from_log(
     }
 
     found_params
+}
+
+async fn fetch_verifier_param_from_l1(
+    block_number: u64,
+    network: &str,
+    rpc_url: &str,
+) -> VerifierParams {
+    let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
+    let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
+
+    let base_contract: BaseContract = contract_abi.into();
+    let address = get_diamond_proxy_address(network.to_string());
+    let contract_instance = base_contract.into_contract::<Provider<Http>>(address, client);
+    let (
+        recursion_node_level_vk_hash,
+        recursion_leaf_level_vk_hash,
+        recursion_circuits_set_vk_hash,
+    ) = contract_instance
+        .method::<_, (H256, H256, H256)>("getVerifierParams", ())
+        .unwrap()
+        .block(block_number)
+        .call()
+        .await
+        .unwrap();
+
+    VerifierParams {
+        recursion_node_level_vk_hash: recursion_node_level_vk_hash.to_fixed_bytes(),
+        recursion_leaf_level_vk_hash: recursion_leaf_level_vk_hash.to_fixed_bytes(),
+        recursion_circuits_set_vk_hash: recursion_circuits_set_vk_hash.to_fixed_bytes(),
+    }
 }
