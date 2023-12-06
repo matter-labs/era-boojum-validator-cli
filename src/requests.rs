@@ -220,7 +220,7 @@ pub async fn fetch_proof_from_l1(
         .unwrap();
 
     if prove_tx.is_none() {
-        let msg = format!("Proof doesn't exist for batch {} on network {}, exiting...", batch_number.to_string().red(), network.red());
+        let msg = format!("Proof doesn't exist for batch {} on network {} yet, please try again soon. Exiting...", batch_number.to_string().red(), network.red());
         println!("{}", msg);
         process::exit(0);
     };
