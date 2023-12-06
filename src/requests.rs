@@ -101,13 +101,13 @@ pub async fn fetch_l1_commit_data(
     for b_number in [previous_batch_number, batch_number] {
         let (commit_tx, _) = fetch_batch_commit_tx(b_number, network)
             .await
-            .map_err(|_| format!("failed to find commit transaction for block {}", b_number))
+            .map_err(|e| format!("failed to find commit transaction for block {} for error: {}", b_number, e))
             .unwrap();
 
         let tx = client
             .get_transaction(TxHash::from_str(&commit_tx).unwrap())
             .await
-            .map_err(|_| format!("failed to find commit transaction for block {}", b_number))?
+            .map_err(|e| format!("failed to find commit transaction for block {} for: {}", b_number, e))?
             .unwrap();
         l1_block_number = tx.block_number.unwrap().as_u64();
         calldata = tx.input.to_vec();
@@ -219,8 +219,14 @@ pub async fn fetch_proof_from_l1(
         })
         .unwrap();
 
+    if prove_tx.is_none() {
+        let msg = format!("Proof doesn't exist for batch {} on network {} yet, please try again soon. Exiting...", batch_number.to_string().red(), network.red());
+        println!("{}", msg);
+        process::exit(0);
+    };
+
     let tx = client
-        .get_transaction(TxHash::from_str(&prove_tx).unwrap())
+        .get_transaction(TxHash::from_str(&prove_tx.unwrap()).unwrap())
         .await
         .map_err(|_| {
             format!(
@@ -283,14 +289,14 @@ pub struct JSONL2RPCResponse {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct L1BatchJson {
     commitTxHash: String,
-    proveTxHash: String,
+    proveTxHash: Option<String>,
 }
 
 // Fetches given batch information from Era RPC
 pub async fn fetch_batch_commit_tx(
     batch_number: u64,
     network: &str,
-) -> Result<(String, String), Box<dyn std::error::Error>> {
+) -> Result<(String, Option<String>), Box<dyn std::error::Error>> {
     println!(
         "Fetching batch {} information from zkSync Era on network {}",
         batch_number, network
