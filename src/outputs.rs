@@ -122,7 +122,7 @@ impl StatusCode {
                 println!("{}", serde_json::to_string_pretty(&data).unwrap());
             },
             _ => {
-                process::exit((*self).clone() as i32);
+                
             }
         }
     }
