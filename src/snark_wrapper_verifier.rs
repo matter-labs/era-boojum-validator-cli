@@ -1,5 +1,6 @@
 use std::fs;
 
+use crate::outputs::StatusCode;
 use crate::requests::AuxOutputWitnessWrapper;
 use crate::{proof_from_file, GenerateSolidityTestArgs, VerifySnarkWrapperArgs};
 use circuit_definitions::snark_wrapper::franklin_crypto::bellman::pairing::bn256::{Bn256, Fr};
@@ -22,7 +23,7 @@ pub struct L1BatchProofForL1 {
 /// Pulls a SNARK proof from storage and verifies is with the supplied verification key.
 pub async fn verify_snark_from_storage(
     args: &VerifySnarkWrapperArgs,
-) -> Result<(Fr, AuxOutputWitnessWrapper), String> {
+) -> Result<(Fr, AuxOutputWitnessWrapper, H256), StatusCode> {
     let proof: L1BatchProofForL1 = proof_from_file(&args.l1_batch_proof_file);
     
     verify_snark(
@@ -32,7 +33,7 @@ pub async fn verify_snark_from_storage(
     ).await
 }
 
-pub async fn generate_solidity_test(args: &GenerateSolidityTestArgs) -> Result<(), String> {
+pub async fn generate_solidity_test(args: &GenerateSolidityTestArgs) -> Result<(), StatusCode> {
     let proof: L1BatchProofForL1 = proof_from_file(&args.l1_batch_proof_file);
 
     let (inputs, serialized_proof) = codegen::serialize_proof(&proof.scheduler_proof);
@@ -55,7 +56,7 @@ pub async fn verify_snark(
     snark_vk_scheduler_key_file: String,
     mut proof: L1BatchProofForL1,
     vk_hash_from_l1: Option<H256>,
-) -> Result<(Fr, AuxOutputWitnessWrapper), String> {
+) -> Result<(Fr, AuxOutputWitnessWrapper, H256), StatusCode> {
     println!("Verifying SNARK wrapped FRI proof.");
 
     println!("=== Aux inputs:");
@@ -85,7 +86,11 @@ pub async fn verify_snark(
 
     proof.scheduler_proof.n = vk_inner.n;
 
-    check_verification_key(vk_inner.clone(), vk_hash_from_l1);
+    let computed_hash = check_verification_key(vk_inner.clone(), vk_hash_from_l1);
+
+    if computed_hash.is_err() {
+        return Err(computed_hash.err().unwrap());
+    }
 
     println!("Verifying the proof");
     let is_valid =
@@ -94,7 +99,7 @@ pub async fn verify_snark(
 
     if !is_valid {
         println!("Proof is {}", "INVALID".red());
-        return Err("Proof is not valid".to_owned());
+        return Err(StatusCode::ProofVerificationFailed);
     } else {
         println!("Proof is {}", "VALID".green());
     };
@@ -115,17 +120,17 @@ pub async fn verify_snark(
 
     };
 
-    Ok((public_input, aux_witness))
+    Ok((public_input, aux_witness, computed_hash.unwrap()))
 }
 
 /// Check that the hash of the verificattion key provided is equal to the supplied hash.
 fn check_verification_key(
     verification_key: VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit>,
     vk_hash_from_l1: Option<H256>,
-) {
+) -> Result<H256, StatusCode> {
     if vk_hash_from_l1.is_none() {
         println!("Supplied vk hash is None, skipping check...");
-        return;
+        return Ok(H256::default());
     }
 
     let computed_vk_hash = calculate_verification_key_hash(verification_key);
@@ -144,4 +149,10 @@ fn check_verification_key(
         computed_vk_hash, vk_hash_from_l1.unwrap(),
         "Make sure the verification key is updated."
     );
+
+    if computed_vk_hash != vk_hash_from_l1.unwrap() {
+        return Err(StatusCode::VerificationKeyHashMismatch);
+    }
+
+    return Ok(computed_vk_hash);
 }

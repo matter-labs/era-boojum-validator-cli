@@ -1,4 +1,3 @@
-use colored::Colorize;
 use ethers::prelude::{Provider, Http, BaseContract, Address, H256};
 use std::str::FromStr;
 
@@ -13,15 +12,6 @@ pub struct ContractConfig {
 impl ContractConfig {
     pub fn new(l1_rpc_url: String, network: String) -> Self {
         use ethers::abi::Abi;
-
-        if network != "mainnet" && network != "sepolia" && network != "testnet" {
-            panic!(
-                "Please use network name `{}`, `{}`, or `{}`",
-                "mainnet".yellow(),
-                "sepolia".yellow(),
-                "testnet".yellow()
-            );
-        }
 
         let provider =
             Provider::<Http>::try_from(l1_rpc_url).expect("Failed to connect to provider");
@@ -82,11 +72,6 @@ pub fn get_diamond_proxy_address(network: String) -> Address {
     } else if network == "testnet" {
         Address::from_str("1908e2bf4a88f91e4ef0dc72f02b8ea36bea2319").unwrap()
     } else {
-        panic!(
-            "Please use network name `{}`, `{}`, or `{}`",
-            "mainnet".yellow(),
-            "sepolia".yellow(),
-            "testnet".yellow()
-        );
+        Address::default()
     }
 }
