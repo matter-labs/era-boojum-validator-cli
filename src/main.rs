@@ -11,6 +11,7 @@ use std::{fs::File, process};
 
 mod contract;
 mod inputs;
+mod outputs;
 mod requests;
 mod snark_wrapper_verifier;
 mod utils;
@@ -51,11 +52,14 @@ struct Cli {
     /// Batch number to check proof for
     network: String,
     #[arg(long)]
-    // RPC endpoint to use to fetch L1 information
+    /// RPC endpoint to use to fetch L1 information
     l1_rpc: Option<String>,
-    // Bool to request updating verification key
+    /// Bool to request updating verification key
     #[arg(long)]
     update_verification_key: Option<bool>,
+    /// Flag to print output as json
+    #[arg(long)]
+    json: bool,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -151,8 +155,10 @@ async fn main() {
     let network = opt.network.clone().to_string();
     let l1_rpc = opt.l1_rpc;
 
+    let is_output_json = opt.json;
+
     if network != "mainnet" && network != "sepolia" && network != "testnet" {
-        println!(
+        let msg = format!(
             "Please use network name `{}`, `{}`, or `{}`",
             "mainnet".yellow(),
             "sepolia".yellow(),
@@ -205,8 +211,6 @@ async fn main() {
 
         println!("\n");
     };
-
-    println!("\n");
 }
 
 #[cfg(test)]

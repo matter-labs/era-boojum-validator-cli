@@ -15,6 +15,7 @@ hex = "*"
 bincode = "*"
 colored = "2.0"
 serde_json = "*"
+serde_repr = "0.1.17"
 serde = {version = "1", features = ["derive"]}
 clap = { version = "4.2.4", features = ["derive"] }
 anyhow = "*"
