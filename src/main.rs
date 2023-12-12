@@ -173,7 +173,7 @@ async fn main() {
 
         if gag.is_some() {
             drop(gag.unwrap());
-            print_json(StatusCode::InvalidNetwork);
+            print_json(StatusCode::InvalidNetwork, batch_number);
             return;
         }
     }
@@ -190,7 +190,7 @@ async fn main() {
 
         if gag.is_some() {
             drop(gag.unwrap());
-            print_json(StatusCode::InvalidNetwork);
+            print_json(StatusCode::InvalidNetwork, batch_number);
             return;
         }
     } else {
@@ -252,12 +252,14 @@ async fn main() {
 
             output = BoojumCliJsonOutput {
                 status_code,
+                batch_number,
                 data
             };     
         } else {
             let status_code = resp.unwrap_err();
             output = BoojumCliJsonOutput {
                 status_code: status_code.clone(),
+                batch_number,
                 data: None
             };
             println!("Failed to verify proof due to error code: {:?}", status_code);

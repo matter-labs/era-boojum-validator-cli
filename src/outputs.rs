@@ -49,7 +49,6 @@ pub fn construct_vk_output(
 #[derive(Serialize)]
 #[serde(rename = "data", rename_all = "camelCase")]
 pub struct DataJsonOutput {
-    pub batch_number: u64,
     pub batch_l1_data: BatchL1Data,
     pub aux_input: BlockAuxilaryOutput,
     pub verifier_params: VerifierParams,
@@ -61,7 +60,6 @@ pub struct DataJsonOutput {
 impl From<L1BatchAndProofData> for DataJsonOutput {
     fn from(batch: L1BatchAndProofData) -> Self {
         Self {
-            batch_number: batch.block_number,
             batch_l1_data: batch.batch_l1_data,
             aux_input: batch.aux_output,
             verifier_params: batch.verifier_params,
@@ -76,6 +74,7 @@ impl From<L1BatchAndProofData> for DataJsonOutput {
 #[serde(rename_all = "camelCase")]
 pub struct BoojumCliJsonOutput {
     pub status_code: StatusCode,
+    pub batch_number: u64,
     pub data: Option<DataJsonOutput>,
 }
 
@@ -161,9 +160,10 @@ impl Serialize for VerificationKeyHashJsonOutput {
     }
 }
 
-pub fn print_json(status_code: StatusCode) {
+pub fn print_json(status_code: StatusCode, batch_number: u64) {
     let output = BoojumCliJsonOutput {
         status_code: status_code.clone(),
+        batch_number,
         data: None,
     };
 
