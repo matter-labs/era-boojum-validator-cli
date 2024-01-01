@@ -55,7 +55,30 @@ cargo run -- --batch 109939 --network mainnet --l1-rpc https://rpc.ankr.com/eth 
 --network - Along with batch number, defines if you want to verify a proof for Era testnet or mainnet. It defaults to mainnet. Accepts "mainnet" or "testnet"
 --l1-rpc - The RPC url required to pull data from L1.
 --update-verification-key - Specifes if the verification key should be updated from [github](https://github.com/matter-labs/era-contracts/blob/main/tools/data/scheduler_key.json).
+--json - Flag to specify if the output should be in json. Note that all the usual std out prints are silenced.
 ```
+
+## Error Codes
+
+Below is a list of the error codes that can be seen in the json output of the cli tool:
+- 0 => `Success`
+- 1 => `InvalidNetwork`
+- 2 => `NoRPCProvided`
+- 3 => `FailedToDeconstruct`
+- 4 => `FailedToGetDataFromL1`
+- 5 => `FailedToFindCommitTxn`
+- 6 => `InvalidLog`
+- 7 => `FailedToGetTransactionReceipt`
+- 8 => `FailedToGetBatchCommitment`
+- 9 => `ProofDoesntExist`
+- 10 => `FailedToFindProveTxn`
+- 11 => `InvalidTupleTypes`
+- 12 => `FailedToCallRPC`
+- 13 => `VerificationKeyHashMismatch`
+- 14 => `FailedToDownloadVerificationKey`
+- 15=> `FailedToWriteVerificationKeyToDisk`
+- 16 => `ProofVerificationFailed`
+
 # Future plans
 
 Currently this CLI verification keys are hardcoded or pulled from github, but the plan is to extend this tool to:

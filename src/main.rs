@@ -5,21 +5,24 @@ use circuit_definitions::circuit_definitions::recursion_layer::scheduler::Concre
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use gag::Gag;
 use serde::Deserialize;
 use std::io::Read;
 use std::{fs::File, process};
 
 mod contract;
 mod inputs;
+mod outputs;
 mod requests;
 mod snark_wrapper_verifier;
 mod utils;
 
 use crate::contract::ContractConfig;
 use crate::inputs::generate_inputs;
+use crate::outputs::{print_json, StatusCode, BoojumCliJsonOutput, DataJsonOutput, construct_vk_output};
 use crate::requests::L1BatchAndProofData;
 use crate::snark_wrapper_verifier::{
-    generate_solidity_test, L1BatchProofForL1, verify_snark_from_storage, verify_snark,
+    generate_solidity_test, verify_snark, verify_snark_from_storage, L1BatchProofForL1,
 };
 use crate::utils::update_verification_key_if_needed;
 pub mod block_header;
@@ -51,11 +54,14 @@ struct Cli {
     /// Batch number to check proof for
     network: String,
     #[arg(long)]
-    // RPC endpoint to use to fetch L1 information
+    /// RPC endpoint to use to fetch L1 information
     l1_rpc: Option<String>,
-    // Bool to request updating verification key
+    /// Bool to request updating verification key
     #[arg(long)]
     update_verification_key: Option<bool>,
+    /// Flag to print output as json
+    #[arg(long)]
+    json: bool,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -141,7 +147,7 @@ async fn main() {
             Commands::GenerateSolidityTest(args) => generate_solidity_test(&args).await.err(),
         };
         if let Some(error) = result {
-            println!("Command failed: {}", error);
+            println!("Command failed: {:?}", error);
             process::exit(1);
         }
         return;
@@ -151,6 +157,14 @@ async fn main() {
     let network = opt.network.clone().to_string();
     let l1_rpc = opt.l1_rpc;
 
+    // Gag allows us to stop all normal std out, this is the simplest way to keep the code the same
+    // while supporting only printing the desired json
+    let gag = if opt.json {
+        Some(Gag::stdout().unwrap())
+    } else {
+        None
+    };
+
     if network != "mainnet" && network != "sepolia" && network != "testnet" {
         println!(
             "Please use network name `{}`, `{}`, or `{}`",
@@ -158,7 +172,12 @@ async fn main() {
             "sepolia".yellow(),
             "testnet".yellow()
         );
-        return;
+
+        if gag.is_some() {
+            drop(gag.unwrap());
+            print_json(StatusCode::InvalidNetwork, batch_number);
+            return;
+        }
     }
 
     update_verification_key_if_needed(opt.update_verification_key).await;
@@ -170,43 +189,87 @@ async fn main() {
             "Skipping building batch information from Ethereum as no RPC url was provided."
                 .yellow()
         );
+
+        if gag.is_some() {
+            drop(gag.unwrap());
+            print_json(StatusCode::InvalidNetwork, batch_number);
+            return;
+        }
     } else {
         let contract = ContractConfig::new(l1_rpc.clone().unwrap(), network.clone());
 
-        let L1BatchAndProofData {
+        let resp = requests::fetch_l1_data(batch_number, &network, &l1_rpc.clone().unwrap()).await;
+
+        let output = if let Ok(L1BatchAndProofData {
             aux_output,
             scheduler_proof,
             batch_l1_data,
             verifier_params,
             block_number,
-        } = requests::fetch_l1_data(batch_number, &network, &l1_rpc.clone().unwrap()).await;
+        }) = resp.clone()
+        {
+            let vk_hash = contract.get_verification_key_hash(block_number).await;
 
-        let vk_hash = contract.get_verification_key_hash(block_number).await;
+            let snark_vk_scheduler_key_file = "src/keys/scheduler_key.json";
 
-        let snark_vk_scheduler_key_file = "src/keys/scheduler_key.json";
+            let mut batch_proof = L1BatchProofForL1 {
+                aggregation_result_coords: aux_output.prepare_aggregation_result_coords(),
+                scheduler_proof,
+            };
 
-        let mut batch_proof = L1BatchProofForL1 {
-            aggregation_result_coords: aux_output.prepare_aggregation_result_coords(),
-            scheduler_proof,
+            let inputs = generate_inputs(batch_l1_data, verifier_params);
+
+            batch_proof.scheduler_proof.inputs = inputs;
+
+            // First, we verify that the proof itself is valid.
+            let verify_resp = verify_snark(
+                snark_vk_scheduler_key_file.to_string(),
+                batch_proof,
+                Some(vk_hash),
+            )
+            .await;
+
+            let mut data = None;
+            let mut status_code = StatusCode::Success;
+
+            if let Ok((input, _, computed_vk_hash)) = verify_resp {
+                
+                
+                let mut inner_data = DataJsonOutput::from(resp.unwrap());
+                inner_data.verification_key_hash = construct_vk_output(
+                    vk_hash.to_fixed_bytes(),
+                    computed_vk_hash.to_fixed_bytes(),
+                );
+
+                inner_data.public_input = input;
+                inner_data.is_proof_valid = true;
+
+                data = Some(inner_data);
+            } else {
+                status_code = resp.err().unwrap();
+                println!("Failed to verify proof due to error code: {:?}", status_code);
+            }
+
+            BoojumCliJsonOutput {
+                status_code,
+                batch_number,
+                data
+            }
+        } else {
+            let status_code = resp.unwrap_err();
+            println!("Failed to verify proof due to error code: {:?}", status_code);
+            BoojumCliJsonOutput {
+                status_code: status_code.clone(),
+                batch_number,
+                data: None
+            }
         };
 
-        let inputs = generate_inputs(batch_l1_data, verifier_params);
-
-        batch_proof.scheduler_proof.inputs = inputs;
-
-        // First, we verify that the proof itself is valid.
-        verify_snark(
-            snark_vk_scheduler_key_file.to_string(),
-            batch_proof,
-            Some(vk_hash),
-        )
-        .await
-        .unwrap();
-
-        println!("\n");
+        if let Some(gag) = gag {
+            drop(gag);
+            println!("{}", serde_json::to_string_pretty(&output).unwrap());
+        }
     };
-
-    println!("\n");
 }
 
 #[cfg(test)]
@@ -217,6 +280,7 @@ mod test {
     use zksync_types::H256;
 
     use super::*;
+    use block_header::VerifierParams;
     use circuit_definitions::{
         circuit_definitions::{
             base_layer::ZkSyncBaseLayerStorage,
@@ -227,7 +291,6 @@ mod test {
     };
     use colored::Colorize;
     use std::str::FromStr;
-    use block_header::VerifierParams;
 
     #[test]
     fn test_scheduler_proof() {
@@ -236,7 +299,7 @@ mod test {
 
     #[tokio::test]
     async fn test_local_proof_v3() {
-        let (public_input, _) = verify_snark_from_storage(&VerifySnarkWrapperArgs {
+        let (public_input, _, _) = verify_snark_from_storage(&VerifySnarkWrapperArgs {
             l1_batch_proof_file: "example_proofs/snark_wrapper/v3/l1_batch_proof_1.bin".to_string(),
             snark_vk_scheduler_key_file:
                 "example_proofs/snark_wrapper/v3/snark_verification_scheduler_key.json".to_string(),
@@ -281,9 +344,17 @@ mod test {
         };
 
         let verifier_params = VerifierParams {
-            recursion_node_level_vk_hash: H256::from_str("5a3ef282b21e12fe1f4438e5bb158fc5060b160559c5158c6389d62d9fe3d080").unwrap().to_fixed_bytes(),
-            recursion_leaf_level_vk_hash: H256::from_str("14628525c227822148e718ca1138acfc6d25e759e19452455d89f7f610c3dcb8").unwrap().to_fixed_bytes(),
-            recursion_circuits_set_vk_hash: [0u8; 32]
+            recursion_node_level_vk_hash: H256::from_str(
+                "5a3ef282b21e12fe1f4438e5bb158fc5060b160559c5158c6389d62d9fe3d080",
+            )
+            .unwrap()
+            .to_fixed_bytes(),
+            recursion_leaf_level_vk_hash: H256::from_str(
+                "14628525c227822148e718ca1138acfc6d25e759e19452455d89f7f610c3dcb8",
+            )
+            .unwrap()
+            .to_fixed_bytes(),
+            recursion_circuits_set_vk_hash: [0u8; 32],
         };
 
         let result = generate_inputs(l1_data, verifier_params);

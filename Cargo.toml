@@ -15,6 +15,7 @@ hex = "*"
 bincode = "*"
 colored = "2.0"
 serde_json = "*"
+serde_repr = "0.1.17"
 serde = {version = "1", features = ["derive"]}
 clap = { version = "4.2.4", features = ["derive"] }
 anyhow = "*"
@@ -24,5 +25,7 @@ ethers = {version = "1", features = ["ws", "rustls"]}
 sha3 = "*"
 once_cell = "1.7"
 primitive-types = "0.12.2"
+
+gag = "1.0.0"
 
 crypto = { path = "./crypto" }
