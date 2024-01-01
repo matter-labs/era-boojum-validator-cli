@@ -52,6 +52,8 @@ pub async fn generate_solidity_test(args: &GenerateSolidityTestArgs) -> Result<(
 }
 
 /// Verifies a SNARK proof with a given verification key, checking the verification key hash if a value is supplied.
+/// Returns a result where the Ok value is the public input, aux witness, and computed vk hash. The error value is
+/// the status code for the failure.
 pub async fn verify_snark(
     snark_vk_scheduler_key_file: String,
     mut proof: L1BatchProofForL1,

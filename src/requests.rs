@@ -116,7 +116,7 @@ pub async fn fetch_l1_commit_data(
             .map_err(|_| StatusCode::FailedToFindCommitTxn);
 
         if commit_tx.is_err() {
-            return Err(StatusCode::FailedToFindCommitTxn);
+            return Err(commit_tx.err().unwrap());
         }
 
         let (commit_tx, _) = commit_tx.unwrap();

@@ -157,6 +157,8 @@ async fn main() {
     let network = opt.network.clone().to_string();
     let l1_rpc = opt.l1_rpc;
 
+    // Gag allows us to stop all normal std out, this is the simplest way to keep the code the same
+    // while supporting only printing the desired json
     let gag = if opt.json {
         Some(Gag::stdout().unwrap())
     } else {
@@ -198,9 +200,7 @@ async fn main() {
 
         let resp = requests::fetch_l1_data(batch_number, &network, &l1_rpc.clone().unwrap()).await;
 
-        let output: BoojumCliJsonOutput;
-
-        if let Ok(L1BatchAndProofData {
+        let output = if let Ok(L1BatchAndProofData {
             aux_output,
             scheduler_proof,
             batch_l1_data,
@@ -250,20 +250,20 @@ async fn main() {
                 println!("Failed to verify proof due to error code: {:?}", status_code);
             }
 
-            output = BoojumCliJsonOutput {
+            BoojumCliJsonOutput {
                 status_code,
                 batch_number,
                 data
-            };     
+            }
         } else {
             let status_code = resp.unwrap_err();
-            output = BoojumCliJsonOutput {
+            println!("Failed to verify proof due to error code: {:?}", status_code);
+            BoojumCliJsonOutput {
                 status_code: status_code.clone(),
                 batch_number,
                 data: None
-            };
-            println!("Failed to verify proof due to error code: {:?}", status_code);
-        }
+            }
+        };
 
         if let Some(gag) = gag {
             drop(gag);
