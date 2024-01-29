@@ -69,7 +69,7 @@ pub async fn fetch_l1_data(
 ) -> Result<L1BatchAndProofData, StatusCode> {
     let commit_data = fetch_l1_commit_data(batch_number, network, rpc_url).await;
     if commit_data.is_err() {
-        return Err(StatusCode::FailedToGetDataFromL1);
+        return Err(commit_data.err().unwrap());
     }
 
     let (batch_l1_data, aux_output) = commit_data.unwrap();
@@ -113,7 +113,7 @@ pub async fn fetch_l1_commit_data(
     for b_number in [previous_batch_number, batch_number] {
         let commit_tx = fetch_batch_commit_tx(b_number, network)
             .await
-            .map_err(|_| StatusCode::FailedToFindCommitTxn);
+            .map_err(|e| e);
 
         if commit_tx.is_err() {
             return Err(commit_tx.err().unwrap());
@@ -294,15 +294,13 @@ pub async fn fetch_proof_from_l1(
     }
 
     let x: Proof<Bn256, ZkSyncSnarkWrapperCircuit> = deserialize_proof(proof);
-    Ok(
-        (
-            L1BatchProofForL1 {
-                aggregation_result_coords: [[0u8; 32]; 4],
-                scheduler_proof: x,
-            },
-            l1_block_number,
-        )
-    )
+    Ok((
+        L1BatchProofForL1 {
+            aggregation_result_coords: [[0u8; 32]; 4],
+            scheduler_proof: x,
+        },
+        l1_block_number,
+    ))
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -359,18 +357,17 @@ pub async fn fetch_batch_commit_tx(
     let response = response.unwrap();
 
     if response.status().is_success() {
-        let json = response.json::<JSONL2RPCResponse>()
-            .await;
+        let json = response.json::<JSONL2RPCResponse>().await;
 
         if json.is_err() {
-            return Err(StatusCode::FailedToCallRPC);
+            return Err(StatusCode::FailedToCallRPCJsonError);
         }
 
         let json = json.unwrap();
 
         return Ok((json.result.commitTxHash, json.result.proveTxHash));
     } else {
-        return Err(StatusCode::FailedToCallRPC);
+        return Err(StatusCode::FailedToCallRPCResponseError);
     }
 }
 
