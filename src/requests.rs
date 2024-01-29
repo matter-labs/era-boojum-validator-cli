@@ -351,7 +351,7 @@ pub async fn fetch_batch_commit_tx(
         .await;
 
     if response.is_err() {
-        return Err(StatusCode::FailedToCallRPC);
+        return Err(StatusCode::FailedToCallL2RPC);
     }
 
     let response = response.unwrap();

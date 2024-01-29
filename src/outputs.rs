@@ -23,6 +23,7 @@ pub enum StatusCode {
     ProofDoesntExist,
     FailedToFindProveTxn,
     InvalidTupleTypes,
+    FailedToCallL2RPC,
     FailedToCallRPC,
     FailedToCallRPCJsonError,
     FailedToCallRPCResponseError,
