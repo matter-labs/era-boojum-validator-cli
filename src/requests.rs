@@ -69,7 +69,7 @@ pub async fn fetch_l1_data(
 ) -> Result<L1BatchAndProofData, StatusCode> {
     let commit_data = fetch_l1_commit_data(batch_number, network, rpc_url).await;
     if commit_data.is_err() {
-        return Err(StatusCode::FailedToGetDataFromL1);
+        return Err(commit_data.err().unwrap());
     }
 
     let (batch_l1_data, aux_output) = commit_data.unwrap();
@@ -112,8 +112,7 @@ pub async fn fetch_l1_commit_data(
     let mut curr_batch_commitment = H256::default();
     for b_number in [previous_batch_number, batch_number] {
         let commit_tx = fetch_batch_commit_tx(b_number, network)
-            .await
-            .map_err(|_| StatusCode::FailedToFindCommitTxn);
+            .await;
 
         if commit_tx.is_err() {
             return Err(commit_tx.err().unwrap());
@@ -363,14 +362,14 @@ pub async fn fetch_batch_commit_tx(
             .await;
 
         if json.is_err() {
-            return Err(StatusCode::FailedToCallRPC);
+            return Err(StatusCode::FailedToCallRPCJsonError);
         }
 
         let json = json.unwrap();
 
         return Ok((json.result.commitTxHash, json.result.proveTxHash));
     } else {
-        return Err(StatusCode::FailedToCallRPC);
+        return Err(StatusCode::FailedToCallRPCResponseError);
     }
 }
 
@@ -380,6 +379,10 @@ fn find_state_data_from_log(
     calldata: &[u8],
 ) -> Result<Option<(u64, Vec<u8>)>, StatusCode> {
     use ethers::abi;
+
+    if calldata.len() < 5 {
+        return Err(StatusCode::BadCalldataLength);
+    }
 
     let mut parsed_input = function.decode_input(&calldata[4..]).unwrap();
     assert_eq!(parsed_input.len(), 2);

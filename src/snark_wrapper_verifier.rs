@@ -80,9 +80,16 @@ pub async fn verify_snark(
     );
 
     println!("=== Loading verification key.");
+    let verification_key = &fs::read_to_string(snark_vk_scheduler_key_file.clone());
+
+    if verification_key.is_err() {
+        println!("Unable to load verification key from: {}", snark_vk_scheduler_key_file.clone());
+        return Err(StatusCode::FailedToLoadVerificationKey);
+    }
+
     use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
     let vk_inner : VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> = serde_json::from_str(
-        &fs::read_to_string(snark_vk_scheduler_key_file.clone()).unwrap()
+        &verification_key.as_ref().unwrap()
     )
     .unwrap();
 
