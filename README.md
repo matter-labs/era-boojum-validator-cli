@@ -76,8 +76,12 @@ Below is a list of the error codes that can be seen in the json output of the cl
 - 12 => `FailedToCallRPC`
 - 13 => `VerificationKeyHashMismatch`
 - 14 => `FailedToDownloadVerificationKey`
-- 15=> `FailedToWriteVerificationKeyToDisk`
+- 15 => `FailedToWriteVerificationKeyToDisk`
 - 16 => `ProofVerificationFailed`
+- 17 => `FailedToLoadVerificationKey`,
+- 18 => `BadCalldataLength`,
+- 19 => `FailedToCallRPCJsonError`,
+- 20 => `FailedToCallRPCResponseError`,
 
 # Future plans
 

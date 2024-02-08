@@ -28,6 +28,10 @@ pub enum StatusCode {
     FailedToDownloadVerificationKey,
     FailedToWriteVerificationKeyToDisk,
     ProofVerificationFailed,
+    FailedToLoadVerificationKey,
+    BadCalldataLength,
+    FailedToCallRPCJsonError,
+    FailedToCallRPCResponseError,
 }
 
 #[derive(Default)]

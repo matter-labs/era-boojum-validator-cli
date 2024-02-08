@@ -36,6 +36,10 @@ impl BlockAuxilaryOutput {
 pub fn parse_aux_data(func: &Function, calldata: &[u8]) -> Result<BlockAuxilaryOutput, StatusCode> {
     use ethers::abi;
 
+    if calldata.len() < 5 {
+        return Err(StatusCode::BadCalldataLength);
+    }
+
     let mut parsed_calldata = func.decode_input(&calldata[4..]).unwrap();
     assert_eq!(parsed_calldata.len(), 2);
 
