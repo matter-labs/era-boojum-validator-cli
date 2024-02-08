@@ -317,6 +317,22 @@ pub struct L1BatchJson {
     proveTxHash: Option<String>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct L1BatchRangeJson {
+    result: Vec<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct JSONL2SyncRPCResponse {
+    result: L2SyncDetails,
+}
+
+#[allow(non_snake_case)]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct L2SyncDetails {
+    protocolVersion: String,
+}
+
 // Fetches given batch information from Era RPC
 pub async fn fetch_batch_commit_tx(
     batch_number: u64,
@@ -369,6 +385,109 @@ pub async fn fetch_batch_commit_tx(
         let json = json.unwrap();
 
         return Ok((json.result.commitTxHash, json.result.proveTxHash));
+    } else {
+        return Err(StatusCode::FailedToCallRPC);
+    }
+}
+
+// Fetches given batch information from Era RPC
+pub async fn fetch_batch_protocol_version(
+    batch_number: u64,
+    network: &str,
+) -> Result<String, StatusCode> {
+    println!(
+        "Fetching batch {} protocol version from zkSync Era on network {}",
+        batch_number, network
+    );
+
+    let domain;
+    if network == "sepolia" {
+        domain = "https://sepolia.era.zksync.dev"
+    } else if network == "mainnet" {
+        domain = "https://mainnet.era.zksync.io"
+    } else {
+        domain = "https://testnet.era.zksync.dev"
+    }
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(domain)
+        .header("Content-Type", "application/json")
+        .body(format!(
+            r#"{{
+            "jsonrpc": "2.0",
+            "method": "zks_getL1BatchBlockRange",
+            "params": [{}],
+            "id": "1"
+        }}"#,
+            batch_number
+        ))
+        .send()
+        .await;
+
+    if response.is_err() {
+        return Err(StatusCode::FailedToCallRPC);
+    }
+
+    let response = response.unwrap();
+
+    if response.status().is_success() {
+        let json = response.json::<L1BatchRangeJson>()
+            .await;
+
+        if json.is_err() {
+            return Err(StatusCode::FailedToCallRPC);
+        }
+
+        let batch_range = json.unwrap();
+
+        let l2_block_hex = batch_range.result[0].clone();
+
+        let without_prefix = l2_block_hex.trim_start_matches("0x");
+        let l2_block = i64::from_str_radix(without_prefix, 16);
+
+        let response_2 = client
+            .post(domain)
+            .header("Content-Type", "application/json")
+            .body(format!(
+                r#"{{
+                "jsonrpc": "2.0",
+                "method": "en_syncL2Block",
+                "params": [{}, false],
+                "id": "1"
+            }}"#,
+                l2_block.unwrap()
+            ))
+            .send()
+            .await;
+
+        if response_2.is_err() {
+            return Err(StatusCode::FailedToCallRPC);
+        }
+    
+        let response_2 = response_2.unwrap();
+    
+        if response_2.status().is_success() {
+            let json_2 = response_2.json::<JSONL2SyncRPCResponse>()
+            .await;
+
+            if json_2.is_err() {
+                return Err(StatusCode::FailedToCallRPC);
+            }
+
+            let sync_result = json_2.unwrap();
+
+            let version = sync_result.result.protocolVersion.strip_prefix("Version").unwrap();
+
+            println!(
+                "Batch {} has protocol version {}",
+                batch_number, version
+            );
+
+            return Ok(version.to_string());
+        } else {
+            return Err(StatusCode::FailedToCallRPC);
+        }
     } else {
         return Err(StatusCode::FailedToCallRPC);
     }
