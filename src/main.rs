@@ -56,9 +56,6 @@ struct Cli {
     #[arg(long)]
     /// RPC endpoint to use to fetch L1 information
     l1_rpc: Option<String>,
-    /// Bool to request updating verification key
-    #[arg(long)]
-    update_verification_key: Option<bool>,
     /// Flag to print output as json
     #[arg(long)]
     json: bool,

@@ -7,6 +7,7 @@ pub async fn check_verification_key(protocol_version: String) {
     let file_exists = file.exists();
 
     if !file_exists {
+        // If the key for the latest protocol version is nout available in this repo yet, you can always find it at https://github.com/matter-labs/era-contracts/blob/main/tools/data/scheduler_key.json
         eprintln!("Verification key for protocol version {} is missing. Please add it to the keys folder.", protocol_version);
         std::process::exit(1)
     }
