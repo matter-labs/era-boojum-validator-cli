@@ -24,7 +24,7 @@ use crate::requests::L1BatchAndProofData;
 use crate::snark_wrapper_verifier::{
     generate_solidity_test, verify_snark, verify_snark_from_storage, L1BatchProofForL1,
 };
-use crate::utils::update_verification_key_if_needed;
+use crate::utils::check_verification_key;
 pub mod block_header;
 
 use circuit_definitions::boojum::{
@@ -56,9 +56,6 @@ struct Cli {
     #[arg(long)]
     /// RPC endpoint to use to fetch L1 information
     l1_rpc: Option<String>,
-    /// Bool to request updating verification key
-    #[arg(long)]
-    update_verification_key: Option<bool>,
     /// Flag to print output as json
     #[arg(long)]
     json: bool,
@@ -180,7 +177,7 @@ async fn main() {
         }
     }
 
-    update_verification_key_if_needed(opt.update_verification_key).await;
+    let protocol_version = requests::fetch_batch_protocol_version(batch_number, &network).await;
 
     println!("{}", "Fetching and validating the proof itself".on_blue());
     if l1_rpc.is_none() {
@@ -196,6 +193,9 @@ async fn main() {
             return;
         }
     } else {
+
+        check_verification_key(protocol_version.clone().unwrap()).await;
+
         let contract = ContractConfig::new(l1_rpc.clone().unwrap(), network.clone());
 
         let resp = requests::fetch_l1_data(batch_number, &network, &l1_rpc.clone().unwrap()).await;
@@ -210,8 +210,8 @@ async fn main() {
         {
             let vk_hash = contract.get_verification_key_hash(block_number).await;
 
-            let snark_vk_scheduler_key_file = "src/keys/scheduler_key.json";
-
+            let snark_vk_scheduler_key_file = format!("src/keys/protocol_version/{}/scheduler_key.json", protocol_version.unwrap());
+            
             let mut batch_proof = L1BatchProofForL1 {
                 aggregation_result_coords: aux_output.prepare_aggregation_result_coords(),
                 scheduler_proof,
