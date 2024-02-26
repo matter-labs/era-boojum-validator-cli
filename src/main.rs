@@ -25,6 +25,7 @@ use crate::snark_wrapper_verifier::{
     generate_solidity_test, verify_snark, verify_snark_from_storage, L1BatchProofForL1,
 };
 use crate::utils::check_verification_key;
+use crate::utils::ensure_key_file_exists;
 pub mod block_header;
 
 use circuit_definitions::boojum::{
@@ -59,6 +60,8 @@ struct Cli {
     /// Flag to print output as json
     #[arg(long)]
     json: bool,
+    #[arg(long)]
+    scheduler_key: Option<String>,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -153,6 +156,7 @@ async fn main() {
     let batch_number = opt.batch;
     let network = opt.network.clone().to_string();
     let l1_rpc = opt.l1_rpc;
+    let scheduler_key_override = opt.scheduler_key;
 
     // Gag allows us to stop all normal std out, this is the simplest way to keep the code the same
     // while supporting only printing the desired json
@@ -193,8 +197,12 @@ async fn main() {
             return;
         }
     } else {
-
-        check_verification_key(protocol_version.clone().unwrap()).await;
+        match scheduler_key_override.clone() {
+            None => check_verification_key(protocol_version.clone().unwrap()).await,
+            Some(scheduler_key_str) => {
+                ensure_key_file_exists(&scheduler_key_str, &format!("Scheduler key at `{}` does not exist", scheduler_key_str)).await;
+            }
+        }
 
         let contract = ContractConfig::new(l1_rpc.clone().unwrap(), network.clone());
 
@@ -210,7 +218,10 @@ async fn main() {
         {
             let vk_hash = contract.get_verification_key_hash(block_number).await;
 
-            let snark_vk_scheduler_key_file = format!("src/keys/protocol_version/{}/scheduler_key.json", protocol_version.unwrap());
+            let snark_vk_scheduler_key_file = match scheduler_key_override {
+                None => format!("src/keys/protocol_version/{}/scheduler_key.json", protocol_version.unwrap()),
+                Some(scheduler_key_str) => scheduler_key_str,
+            };
             
             let mut batch_proof = L1BatchProofForL1 {
                 aggregation_result_coords: aux_output.prepare_aggregation_result_coords(),
@@ -388,8 +399,8 @@ mod test {
 
         assert!(result, "Proof failed");
     }
-    #[test]
 
+    #[test]
     fn test_leaf_proof() {
         // '13' is the id of the Leaf for Events sorter.
         let leaf_13: ZkSyncRecursionLayerStorage<
