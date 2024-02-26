@@ -60,8 +60,8 @@ struct Cli {
     /// Flag to print output as json
     #[arg(long)]
     json: bool,
-    #[arg(long, default_value="")]
-    scheduler_key: String,
+    #[arg(long)]
+    scheduler_key: Option<String>,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -156,7 +156,7 @@ async fn main() {
     let batch_number = opt.batch;
     let network = opt.network.clone().to_string();
     let l1_rpc = opt.l1_rpc;
-    let scheduler_key_override = opt.scheduler_key.clone().to_string();
+    let scheduler_key_override = opt.scheduler_key;
 
     // Gag allows us to stop all normal std out, this is the simplest way to keep the code the same
     // while supporting only printing the desired json
@@ -197,11 +197,11 @@ async fn main() {
             return;
         }
     } else {
-
-        if scheduler_key_override.is_empty() {
-            check_verification_key(protocol_version.clone().unwrap()).await;
-        } else {
-            ensure_key_file_exists(&scheduler_key_override, &format!("Scheduler key at `{}` does not exist", scheduler_key_override)).await;
+        match scheduler_key_override.clone() {
+            None => check_verification_key(protocol_version.clone().unwrap()).await,
+            Some(scheduler_key_str) => {
+                ensure_key_file_exists(&scheduler_key_str, &format!("Scheduler key at `{}` does not exist", scheduler_key_str)).await;
+            }
         }
 
         let contract = ContractConfig::new(l1_rpc.clone().unwrap(), network.clone());
@@ -218,10 +218,9 @@ async fn main() {
         {
             let vk_hash = contract.get_verification_key_hash(block_number).await;
 
-            let snark_vk_scheduler_key_file = if scheduler_key_override.is_empty() {
-                format!("src/keys/protocol_version/{}/scheduler_key.json", protocol_version.unwrap())
-            } else {
-                scheduler_key_override
+            let snark_vk_scheduler_key_file = match scheduler_key_override {
+                None => format!("src/keys/protocol_version/{}/scheduler_key.json", protocol_version.unwrap()),
+                Some(scheduler_key_str) => scheduler_key_str,
             };
             
             let mut batch_proof = L1BatchProofForL1 {
@@ -400,8 +399,8 @@ mod test {
 
         assert!(result, "Proof failed");
     }
-    #[test]
 
+    #[test]
     fn test_leaf_proof() {
         // '13' is the id of the Leaf for Events sorter.
         let leaf_13: ZkSyncRecursionLayerStorage<
