@@ -34,7 +34,7 @@ We are currently generating boojum proofs for all batches on sepolia, so at the 
 You can verify that committed proofs are valid by running:
 
 ```shell
-cargo run -- --batch <batch_number> --l1-rpc <your L1 rpc https endpoint>
+cargo run -- --batch <batch_number> --network <network> --l1-rpc <your L1 rpc https endpoint>
 ```
 
 Full example
