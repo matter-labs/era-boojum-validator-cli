@@ -1,4 +1,4 @@
-use ethers::prelude::{Provider, Http, BaseContract, Address, H256};
+use ethers::prelude::{Address, BaseContract, Http, Provider, H256};
 use std::str::FromStr;
 
 /// Holds various values/parameters needed to interact with on chain data

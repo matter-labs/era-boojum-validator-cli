@@ -53,18 +53,9 @@ pub fn parse_aux_data(func: &Function, calldata: &[u8]) -> Result<BlockAuxilaryO
         return Err(StatusCode::FailedToDeconstruct);
     };
 
-    let [
-        abi::Token::Uint(_batch_number), 
-        abi::Token::Uint(_timestamp), 
-        abi::Token::Uint(_index_repeated_storage_changes), 
-        abi::Token::FixedBytes(_new_state_root), 
-        abi::Token::Uint(_number_l1_txns), 
-        abi::Token::FixedBytes(_priority_operations_hash), 
-        abi::Token::FixedBytes(bootloader_contents_hash), 
-        abi::Token::FixedBytes(event_queue_state_hash), 
-        abi::Token::Bytes(sys_logs), 
-        abi::Token::Bytes(_total_pubdata)
-    ] = committed_batch.as_slice() else {
+    let [abi::Token::Uint(_batch_number), abi::Token::Uint(_timestamp), abi::Token::Uint(_index_repeated_storage_changes), abi::Token::FixedBytes(_new_state_root), abi::Token::Uint(_number_l1_txns), abi::Token::FixedBytes(_priority_operations_hash), abi::Token::FixedBytes(bootloader_contents_hash), abi::Token::FixedBytes(event_queue_state_hash), abi::Token::Bytes(sys_logs), abi::Token::Bytes(_total_pubdata)] =
+        committed_batch.as_slice()
+    else {
         return Err(StatusCode::FailedToDeconstruct);
     };
 
@@ -91,14 +82,12 @@ pub fn parse_aux_data(func: &Function, calldata: &[u8]) -> Result<BlockAuxilaryO
 
     let system_logs_hash = keccak256(sys_logs);
 
-    Ok(
-        BlockAuxilaryOutput {
-            system_logs_hash,
-            state_diff_hash: state_diff_hash_sys_log.value.to_fixed_bytes(),
-            bootloader_heap_initial_content_hash: bootloader_contents_hash_buffer,
-            event_queue_state_hash: event_queue_state_hash_buffer,
-        }
-    )
+    Ok(BlockAuxilaryOutput {
+        system_logs_hash,
+        state_diff_hash: state_diff_hash_sys_log.value.to_fixed_bytes(),
+        bootloader_heap_initial_content_hash: bootloader_contents_hash_buffer,
+        event_queue_state_hash: event_queue_state_hash_buffer,
+    })
 }
 
 pub fn to_fixed_bytes(ins: &[u8]) -> [u8; 32] {

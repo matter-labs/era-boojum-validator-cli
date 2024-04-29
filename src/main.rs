@@ -9,6 +9,7 @@ use gag::Gag;
 use serde::Deserialize;
 use std::io::Read;
 use std::{fs::File, process};
+use zksync_types::ProtocolVersionId;
 
 mod contract;
 mod inputs;
@@ -19,7 +20,9 @@ mod utils;
 
 use crate::contract::ContractConfig;
 use crate::inputs::generate_inputs;
-use crate::outputs::{print_json, StatusCode, BoojumCliJsonOutput, DataJsonOutput, construct_vk_output};
+use crate::outputs::{
+    construct_vk_output, print_json, BoojumCliJsonOutput, DataJsonOutput, StatusCode,
+};
 use crate::requests::L1BatchAndProofData;
 use crate::snark_wrapper_verifier::{
     generate_solidity_test, verify_snark, verify_snark_from_storage, L1BatchProofForL1,
@@ -181,7 +184,9 @@ async fn main() {
         }
     }
 
-    let protocol_version = requests::fetch_batch_protocol_version(batch_number, &network).await;
+    let protocol_version = requests::fetch_batch_protocol_version(batch_number, &network)
+        .await
+        .unwrap();
 
     println!("{}", "Fetching and validating the proof itself".on_blue());
     if l1_rpc.is_none() {
@@ -198,11 +203,18 @@ async fn main() {
         }
     } else {
         match scheduler_key_override.clone() {
-            None => check_verification_key(protocol_version.clone().unwrap()).await,
+            None => check_verification_key(protocol_version.clone()).await,
             Some(scheduler_key_str) => {
-                ensure_key_file_exists(&scheduler_key_str, &format!("Scheduler key at `{}` does not exist", scheduler_key_str)).await;
+                ensure_key_file_exists(
+                    &scheduler_key_str,
+                    &format!("Scheduler key at `{}` does not exist", scheduler_key_str),
+                )
+                .await;
             }
         }
+
+        let protocol_version_id: ProtocolVersionId =
+            protocol_version.parse::<u16>().unwrap().try_into().unwrap();
 
         let contract = ContractConfig::new(l1_rpc.clone().unwrap(), network.clone());
 
@@ -219,16 +231,19 @@ async fn main() {
             let vk_hash = contract.get_verification_key_hash(block_number).await;
 
             let snark_vk_scheduler_key_file = match scheduler_key_override {
-                None => format!("src/keys/protocol_version/{}/scheduler_key.json", protocol_version.unwrap()),
+                None => format!(
+                    "src/keys/protocol_version/{}/scheduler_key.json",
+                    protocol_version.clone()
+                ),
                 Some(scheduler_key_str) => scheduler_key_str,
             };
-            
+
             let mut batch_proof = L1BatchProofForL1 {
                 aggregation_result_coords: aux_output.prepare_aggregation_result_coords(),
                 scheduler_proof,
             };
 
-            let inputs = generate_inputs(batch_l1_data, verifier_params);
+            let inputs = generate_inputs(batch_l1_data, verifier_params, Some(protocol_version_id));
 
             batch_proof.scheduler_proof.inputs = inputs;
 
@@ -244,8 +259,6 @@ async fn main() {
             let mut status_code = StatusCode::Success;
 
             if let Ok((input, _, computed_vk_hash)) = verify_resp {
-                
-                
                 let mut inner_data = DataJsonOutput::from(resp.unwrap());
                 inner_data.verification_key_hash = construct_vk_output(
                     vk_hash.to_fixed_bytes(),
@@ -258,21 +271,27 @@ async fn main() {
                 data = Some(inner_data);
             } else {
                 status_code = resp.err().unwrap();
-                println!("Failed to verify proof due to error code: {:?}", status_code);
+                println!(
+                    "Failed to verify proof due to error code: {:?}",
+                    status_code
+                );
             }
 
             BoojumCliJsonOutput {
                 status_code,
                 batch_number,
-                data
+                data,
             }
         } else {
             let status_code = resp.unwrap_err();
-            println!("Failed to verify proof due to error code: {:?}", status_code);
+            println!(
+                "Failed to verify proof due to error code: {:?}",
+                status_code
+            );
             BoojumCliJsonOutput {
                 status_code: status_code.clone(),
                 batch_number,
-                data: None
+                data: None,
             }
         };
 
@@ -368,7 +387,7 @@ mod test {
             recursion_circuits_set_vk_hash: [0u8; 32],
         };
 
-        let result = generate_inputs(l1_data, verifier_params);
+        let result = generate_inputs(l1_data, verifier_params, None);
 
         println!("Computed proof input: {:?}", result[0]);
 

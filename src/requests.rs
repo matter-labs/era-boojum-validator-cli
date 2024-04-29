@@ -111,8 +111,7 @@ pub async fn fetch_l1_commit_data(
     let mut prev_batch_commitment = H256::default();
     let mut curr_batch_commitment = H256::default();
     for b_number in [previous_batch_number, batch_number] {
-        let commit_tx = fetch_batch_commit_tx(b_number, network)
-            .await;
+        let commit_tx = fetch_batch_commit_tx(b_number, network).await;
 
         if commit_tx.is_err() {
             return Err(commit_tx.err().unwrap());
@@ -293,15 +292,13 @@ pub async fn fetch_proof_from_l1(
     }
 
     let x: Proof<Bn256, ZkSyncSnarkWrapperCircuit> = deserialize_proof(proof);
-    Ok(
-        (
-            L1BatchProofForL1 {
-                aggregation_result_coords: [[0u8; 32]; 4],
-                scheduler_proof: x,
-            },
-            l1_block_number,
-        )
-    )
+    Ok((
+        L1BatchProofForL1 {
+            aggregation_result_coords: [[0u8; 32]; 4],
+            scheduler_proof: x,
+        },
+        l1_block_number,
+    ))
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -374,8 +371,7 @@ pub async fn fetch_batch_commit_tx(
     let response = response.unwrap();
 
     if response.status().is_success() {
-        let json = response.json::<JSONL2RPCResponse>()
-            .await;
+        let json = response.json::<JSONL2RPCResponse>().await;
 
         if json.is_err() {
             return Err(StatusCode::FailedToCallRPCJsonError);
@@ -431,8 +427,7 @@ pub async fn fetch_batch_protocol_version(
     let response = response.unwrap();
 
     if response.status().is_success() {
-        let json = response.json::<L1BatchRangeJson>()
-            .await;
+        let json = response.json::<L1BatchRangeJson>().await;
 
         if json.is_err() {
             return Err(StatusCode::FailedToCallRPC);
@@ -463,12 +458,11 @@ pub async fn fetch_batch_protocol_version(
         if response_2.is_err() {
             return Err(StatusCode::FailedToCallRPC);
         }
-    
+
         let response_2 = response_2.unwrap();
-    
+
         if response_2.status().is_success() {
-            let json_2 = response_2.json::<JSONL2SyncRPCResponse>()
-            .await;
+            let json_2 = response_2.json::<JSONL2SyncRPCResponse>().await;
 
             if json_2.is_err() {
                 return Err(StatusCode::FailedToCallRPC);
@@ -476,12 +470,13 @@ pub async fn fetch_batch_protocol_version(
 
             let sync_result = json_2.unwrap();
 
-            let version = sync_result.result.protocolVersion.strip_prefix("Version").unwrap();
+            let version = sync_result
+                .result
+                .protocolVersion
+                .strip_prefix("Version")
+                .unwrap();
 
-            println!(
-                "Batch {} has protocol version {}",
-                batch_number, version
-            );
+            println!("Batch {} has protocol version {}", batch_number, version);
 
             return Ok(version.to_string());
         } else {
