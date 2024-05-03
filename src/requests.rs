@@ -12,7 +12,7 @@ use ethers::providers::{Http, Middleware, Provider};
 use ethers::types::TxHash;
 use once_cell::sync::Lazy;
 use primitive_types::U256;
-use zksync_types::{ethabi, H256};
+use zksync_types::{ethabi, ProtocolVersionId, H256};
 
 use crate::block_header::{self, BlockAuxilaryOutput, VerifierParams};
 use crate::contract::get_diamond_proxy_address;
@@ -64,10 +64,11 @@ pub struct AuxOutputWitnessWrapper(
 
 pub async fn fetch_l1_data(
     batch_number: u64,
+    protocol_version: ProtocolVersionId,
     network: &str,
     rpc_url: &str,
 ) -> Result<L1BatchAndProofData, StatusCode> {
-    let commit_data = fetch_l1_commit_data(batch_number, network, rpc_url).await;
+    let commit_data = fetch_l1_commit_data(batch_number, protocol_version, network, rpc_url).await;
     if commit_data.is_err() {
         return Err(commit_data.err().unwrap());
     }
@@ -95,13 +96,22 @@ pub async fn fetch_l1_data(
 
 pub async fn fetch_l1_commit_data(
     batch_number: u64,
+    protocol_version: ProtocolVersionId,
     network: &str,
     rpc_url: &str,
 ) -> Result<(BatchL1Data, BlockAuxilaryOutput), StatusCode> {
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
-    let function: Function = contract_abi.functions_by_name("commitBatches").unwrap()[0].clone();
+    
+    let function_name: &str;
+    if !protocol_version.is_post_1_5_0() {
+        function_name = "commitBatches";
+    } else {
+        function_name = "commitBatchesSharedBridge";
+    }
+
+    let function = contract_abi.functions_by_name(&function_name).unwrap()[0].clone();
     let previous_batch_number = batch_number - 1;
     let address = get_diamond_proxy_address(network.to_string());
 

@@ -218,7 +218,7 @@ async fn main() {
 
         let contract = ContractConfig::new(l1_rpc.clone().unwrap(), network.clone());
 
-        let resp = requests::fetch_l1_data(batch_number, &network, &l1_rpc.clone().unwrap()).await;
+        let resp = requests::fetch_l1_data(batch_number, protocol_version_id, &network, &l1_rpc.clone().unwrap()).await;
 
         let output = if let Ok(L1BatchAndProofData {
             aux_output,
