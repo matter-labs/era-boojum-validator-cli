@@ -359,10 +359,8 @@ pub async fn fetch_batch_commit_tx(
     let domain;
     if network == "sepolia" {
         domain = "https://sepolia.era.zksync.dev";
-    } else if network == "mainnet" {
-        domain = "https://mainnet.era.zksync.io";
     } else {
-        domain = "https://dev-api.era-stage-proofs.zksync.dev";
+        domain = "https://mainnet.era.zksync.io";
     }
     let client = reqwest::Client::new();
 
@@ -415,10 +413,8 @@ pub async fn fetch_batch_protocol_version(
     let domain;
     if network == "sepolia" {
         domain = "https://sepolia.era.zksync.dev";
-    } else if network == "mainnet" {
-        domain = "https://mainnet.era.zksync.io";
     } else {
-        domain = "https://dev-api.era-stage-proofs.zksync.dev";
+        domain = "https://mainnet.era.zksync.io";
     }
     let client = reqwest::Client::new();
 

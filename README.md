@@ -21,13 +21,9 @@ It also generates the test, that can be inserted in unittests for Verifier.sol.
 # 
 This is an experimental command line tool to verify the proofs for zkSync Era's updated proof system, Boojum [https://github.com/matter-labs/era-boojum](https://github.com/matter-labs/era-boojum).
 
-The CLI fetches Boojum proofs for a given batch, public inputs, and aux input all from L1 and verifies the proof off chain. For testnet and sepolia chains, there may not be proofs submitted on chian for batches.
+The CLI fetches Boojum proofs for a given batch, public inputs, and aux input all from L1 and verifies the proof off chain. For sepolia chains, there may not be proofs submitted on chian for batches.
 
 Learn more about the Boojum proof system in our blog post: [https://zksync.mirror.xyz/HJ2Pj45EJkRdt5Pau-ZXwkV2ctPx8qFL19STM5jdYhc](https://zksync.mirror.xyz/HJ2Pj45EJkRdt5Pau-ZXwkV2ctPx8qFL19STM5jdYhc)
-
-# Proof generation limitation
-
-We are currently generating boojum proofs for all batches on sepolia, so at the moment this is the only chain supported. For mainnet and testnet, these will be updated once supported.
 
 # Running the CLI
 
@@ -52,7 +48,7 @@ cargo run -- --batch 109939 --network mainnet --l1-rpc https://rpc.ankr.com/eth 
 
 ```shell
 --batch - The L1 batch number you want to verify the generated proof
---network - Along with batch number, defines if you want to verify a proof for Era testnet or mainnet. It defaults to mainnet. Accepts "mainnet" or "testnet"
+--network - Along with batch number, defines if you want to verify a proof for Era testnet or mainnet. It defaults to mainnet. Accepts "mainnet" or "sepolia"
 --l1-rpc - The RPC url required to pull data from L1.
 --json - Flag to specify if the output should be in json. Note that all the usual std out prints are silenced.
 ```

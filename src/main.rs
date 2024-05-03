@@ -169,12 +169,11 @@ async fn main() {
         None
     };
 
-    if network != "mainnet" && network != "sepolia" && network != "testnet" {
+    if network != "mainnet" && network != "sepolia" {
         println!(
-            "Please use network name `{}`, `{}`, or `{}`",
+            "Please use network name `{}` or `{}`",
             "mainnet".yellow(),
-            "sepolia".yellow(),
-            "testnet".yellow()
+            "sepolia".yellow()
         );
 
         if gag.is_some() {

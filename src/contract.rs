@@ -69,8 +69,6 @@ pub fn get_diamond_proxy_address(network: String) -> Address {
         Address::from_str("32400084c286cf3e17e7b677ea9583e60a000324").unwrap()
     } else if network == "sepolia" {
         Address::from_str("9a6de0f62aa270a8bcb1e2610078650d539b1ef9").unwrap()
-    } else if network == "testnet" {
-        Address::from_str("5bbdede0f0bac61aa64068b60379fe32ecc0f96c").unwrap()
     } else {
         Address::default()
     }
