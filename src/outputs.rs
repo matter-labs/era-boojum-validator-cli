@@ -152,14 +152,8 @@ impl Serialize for VerificationKeyHashJsonOutput {
         S: serde::Serializer,
     {
         let mut state = serializer.serialize_struct("VerificationKeyHash", 2)?;
-        let _ = state.serialize_field(
-            "layer1VkHash",
-            &hex::encode(self.layer_1_vk_hash),
-        );
-        let _ = state.serialize_field(
-            "computedVkHash",
-            &hex::encode(self.computed_vk_hash),
-        );
+        let _ = state.serialize_field("layer1VkHash", &hex::encode(self.layer_1_vk_hash));
+        let _ = state.serialize_field("computedVkHash", &hex::encode(self.computed_vk_hash));
         state.end()
     }
 }

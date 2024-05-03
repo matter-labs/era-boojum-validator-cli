@@ -12,7 +12,7 @@ use ethers::providers::{Http, Middleware, Provider};
 use ethers::types::TxHash;
 use once_cell::sync::Lazy;
 use primitive_types::U256;
-use zksync_types::{ethabi, H256};
+use zksync_types::{ethabi, ProtocolVersionId, H256};
 
 use crate::block_header::{self, BlockAuxilaryOutput, VerifierParams};
 use crate::contract::get_diamond_proxy_address;
@@ -64,17 +64,18 @@ pub struct AuxOutputWitnessWrapper(
 
 pub async fn fetch_l1_data(
     batch_number: u64,
+    protocol_version: ProtocolVersionId,
     network: &str,
     rpc_url: &str,
 ) -> Result<L1BatchAndProofData, StatusCode> {
-    let commit_data = fetch_l1_commit_data(batch_number, network, rpc_url).await;
+    let commit_data = fetch_l1_commit_data(batch_number, protocol_version, network, rpc_url).await;
     if commit_data.is_err() {
         return Err(commit_data.err().unwrap());
     }
 
     let (batch_l1_data, aux_output) = commit_data.unwrap();
 
-    let proof_info = fetch_proof_from_l1(batch_number, network, rpc_url).await;
+    let proof_info = fetch_proof_from_l1(batch_number, network, rpc_url, protocol_version).await;
 
     if proof_info.is_err() {
         return Err(proof_info.err().unwrap());
@@ -95,13 +96,22 @@ pub async fn fetch_l1_data(
 
 pub async fn fetch_l1_commit_data(
     batch_number: u64,
+    protocol_version: ProtocolVersionId,
     network: &str,
     rpc_url: &str,
 ) -> Result<(BatchL1Data, BlockAuxilaryOutput), StatusCode> {
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
-    let function: Function = contract_abi.functions_by_name("commitBatches").unwrap()[0].clone();
+    
+    let function_name: &str;
+    if !protocol_version.is_post_1_5_0() {
+        function_name = "commitBatches";
+    } else {
+        function_name = "commitBatchesSharedBridge";
+    }
+
+    let function = contract_abi.functions_by_name(&function_name).unwrap()[0].clone();
     let previous_batch_number = batch_number - 1;
     let address = get_diamond_proxy_address(network.to_string());
 
@@ -111,8 +121,7 @@ pub async fn fetch_l1_commit_data(
     let mut prev_batch_commitment = H256::default();
     let mut curr_batch_commitment = H256::default();
     for b_number in [previous_batch_number, batch_number] {
-        let commit_tx = fetch_batch_commit_tx(b_number, network)
-            .await;
+        let commit_tx = fetch_batch_commit_tx(b_number, network).await;
 
         if commit_tx.is_err() {
             return Err(commit_tx.err().unwrap());
@@ -227,11 +236,19 @@ pub async fn fetch_proof_from_l1(
     batch_number: u64,
     network: &str,
     rpc_url: &str,
+    protocol_version: ProtocolVersionId,
 ) -> Result<(L1BatchProofForL1, u64), StatusCode> {
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
-    let function = contract_abi.functions_by_name("proveBatches").unwrap()[0].clone();
+
+    let function_name = if !protocol_version.is_post_1_5_0() {
+        "proveBatches"
+    } else {
+        "proveBatchesSharedBridge"
+    };
+
+    let function = contract_abi.functions_by_name(function_name).unwrap()[0].clone();
 
     let (_, prove_tx) = fetch_batch_commit_tx(batch_number, network)
         .await
@@ -260,8 +277,7 @@ pub async fn fetch_proof_from_l1(
 
     let parsed_input = function.decode_input(&calldata[4..]).unwrap();
 
-    assert_eq!(parsed_input.len(), 3);
-    let [_, _, Token::Tuple(proof)] = parsed_input.as_slice() else {
+    let Token::Tuple(proof) = parsed_input.as_slice().last().unwrap() else {
         return Err(StatusCode::InvalidTupleTypes);
     };
 
@@ -293,15 +309,13 @@ pub async fn fetch_proof_from_l1(
     }
 
     let x: Proof<Bn256, ZkSyncSnarkWrapperCircuit> = deserialize_proof(proof);
-    Ok(
-        (
-            L1BatchProofForL1 {
-                aggregation_result_coords: [[0u8; 32]; 4],
-                scheduler_proof: x,
-            },
-            l1_block_number,
-        )
-    )
+    Ok((
+        L1BatchProofForL1 {
+            aggregation_result_coords: [[0u8; 32]; 4],
+            scheduler_proof: x,
+        },
+        l1_block_number,
+    ))
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -344,11 +358,9 @@ pub async fn fetch_batch_commit_tx(
 
     let domain;
     if network == "sepolia" {
-        domain = "https://sepolia.era.zksync.dev"
-    } else if network == "mainnet" {
-        domain = "https://mainnet.era.zksync.io"
+        domain = "https://sepolia.era.zksync.dev";
     } else {
-        domain = "https://testnet.era.zksync.dev"
+        domain = "https://mainnet.era.zksync.io";
     }
     let client = reqwest::Client::new();
 
@@ -374,8 +386,7 @@ pub async fn fetch_batch_commit_tx(
     let response = response.unwrap();
 
     if response.status().is_success() {
-        let json = response.json::<JSONL2RPCResponse>()
-            .await;
+        let json = response.json::<JSONL2RPCResponse>().await;
 
         if json.is_err() {
             return Err(StatusCode::FailedToCallRPCJsonError);
@@ -401,11 +412,9 @@ pub async fn fetch_batch_protocol_version(
 
     let domain;
     if network == "sepolia" {
-        domain = "https://sepolia.era.zksync.dev"
-    } else if network == "mainnet" {
-        domain = "https://mainnet.era.zksync.io"
+        domain = "https://sepolia.era.zksync.dev";
     } else {
-        domain = "https://testnet.era.zksync.dev"
+        domain = "https://mainnet.era.zksync.io";
     }
     let client = reqwest::Client::new();
 
@@ -431,8 +440,7 @@ pub async fn fetch_batch_protocol_version(
     let response = response.unwrap();
 
     if response.status().is_success() {
-        let json = response.json::<L1BatchRangeJson>()
-            .await;
+        let json = response.json::<L1BatchRangeJson>().await;
 
         if json.is_err() {
             return Err(StatusCode::FailedToCallRPC);
@@ -463,12 +471,11 @@ pub async fn fetch_batch_protocol_version(
         if response_2.is_err() {
             return Err(StatusCode::FailedToCallRPC);
         }
-    
+
         let response_2 = response_2.unwrap();
-    
+
         if response_2.status().is_success() {
-            let json_2 = response_2.json::<JSONL2SyncRPCResponse>()
-            .await;
+            let json_2 = response_2.json::<JSONL2SyncRPCResponse>().await;
 
             if json_2.is_err() {
                 return Err(StatusCode::FailedToCallRPC);
@@ -476,12 +483,13 @@ pub async fn fetch_batch_protocol_version(
 
             let sync_result = json_2.unwrap();
 
-            let version = sync_result.result.protocolVersion.strip_prefix("Version").unwrap();
+            let version = sync_result
+                .result
+                .protocolVersion
+                .strip_prefix("Version")
+                .unwrap();
 
-            println!(
-                "Batch {} has protocol version {}",
-                batch_number, version
-            );
+            println!("Batch {} has protocol version {}", batch_number, version);
 
             return Ok(version.to_string());
         } else {
@@ -504,7 +512,7 @@ fn find_state_data_from_log(
     }
 
     let mut parsed_input = function.decode_input(&calldata[4..]).unwrap();
-    assert_eq!(parsed_input.len(), 2);
+    
     let second_param = parsed_input.pop().unwrap();
     let first_param = parsed_input.pop().unwrap();
 

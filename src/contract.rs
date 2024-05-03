@@ -1,4 +1,4 @@
-use ethers::prelude::{Provider, Http, BaseContract, Address, H256};
+use ethers::prelude::{Address, BaseContract, Http, Provider, H256};
 use std::str::FromStr;
 
 /// Holds various values/parameters needed to interact with on chain data
@@ -69,8 +69,6 @@ pub fn get_diamond_proxy_address(network: String) -> Address {
         Address::from_str("32400084c286cf3e17e7b677ea9583e60a000324").unwrap()
     } else if network == "sepolia" {
         Address::from_str("9a6de0f62aa270a8bcb1e2610078650d539b1ef9").unwrap()
-    } else if network == "testnet" {
-        Address::from_str("1908e2bf4a88f91e4ef0dc72f02b8ea36bea2319").unwrap()
     } else {
         Address::default()
     }

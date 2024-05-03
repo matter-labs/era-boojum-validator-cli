@@ -25,12 +25,8 @@ pub async fn verify_snark_from_storage(
     args: &VerifySnarkWrapperArgs,
 ) -> Result<(Fr, AuxOutputWitnessWrapper, H256), StatusCode> {
     let proof: L1BatchProofForL1 = proof_from_file(&args.l1_batch_proof_file);
-    
-    verify_snark(
-        args.snark_vk_scheduler_key_file.clone(),
-        proof,
-        None
-    ).await
+
+    verify_snark(args.snark_vk_scheduler_key_file.clone(), proof, None).await
 }
 
 pub async fn generate_solidity_test(args: &GenerateSolidityTestArgs) -> Result<(), StatusCode> {
@@ -83,15 +79,16 @@ pub async fn verify_snark(
     let verification_key = &fs::read_to_string(snark_vk_scheduler_key_file.clone());
 
     if verification_key.is_err() {
-        println!("Unable to load verification key from: {}", snark_vk_scheduler_key_file.clone());
+        println!(
+            "Unable to load verification key from: {}",
+            snark_vk_scheduler_key_file.clone()
+        );
         return Err(StatusCode::FailedToLoadVerificationKey);
     }
 
     use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::verifier::verify;
-    let vk_inner : VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> = serde_json::from_str(
-        &verification_key.as_ref().unwrap()
-    )
-    .unwrap();
+    let vk_inner: VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> =
+        serde_json::from_str(&verification_key.as_ref().unwrap()).unwrap();
 
     proof.scheduler_proof.n = vk_inner.n;
 
@@ -155,7 +152,8 @@ fn check_verification_key(
     );
 
     assert_eq!(
-        computed_vk_hash, vk_hash_from_l1.unwrap(),
+        computed_vk_hash,
+        vk_hash_from_l1.unwrap(),
         "Make sure the verification key is updated."
     );
 
