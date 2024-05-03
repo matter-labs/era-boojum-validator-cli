@@ -41,7 +41,6 @@ pub fn parse_aux_data(func: &Function, calldata: &[u8]) -> Result<BlockAuxilaryO
     }
 
     let mut parsed_calldata = func.decode_input(&calldata[4..]).unwrap();
-    assert_eq!(parsed_calldata.len(), 2);
 
     let committed_batch = parsed_calldata.pop().unwrap();
 

@@ -75,7 +75,7 @@ pub async fn fetch_l1_data(
 
     let (batch_l1_data, aux_output) = commit_data.unwrap();
 
-    let proof_info = fetch_proof_from_l1(batch_number, network, rpc_url).await;
+    let proof_info = fetch_proof_from_l1(batch_number, network, rpc_url, protocol_version).await;
 
     if proof_info.is_err() {
         return Err(proof_info.err().unwrap());
@@ -236,11 +236,19 @@ pub async fn fetch_proof_from_l1(
     batch_number: u64,
     network: &str,
     rpc_url: &str,
+    protocol_version: ProtocolVersionId,
 ) -> Result<(L1BatchProofForL1, u64), StatusCode> {
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
-    let function = contract_abi.functions_by_name("proveBatches").unwrap()[0].clone();
+
+    let function_name = if !protocol_version.is_post_1_5_0() {
+        "proveBatches"
+    } else {
+        "proveBatchesSharedBridge"
+    };
+
+    let function = contract_abi.functions_by_name(function_name).unwrap()[0].clone();
 
     let (_, prove_tx) = fetch_batch_commit_tx(batch_number, network)
         .await
@@ -269,8 +277,7 @@ pub async fn fetch_proof_from_l1(
 
     let parsed_input = function.decode_input(&calldata[4..]).unwrap();
 
-    assert_eq!(parsed_input.len(), 3);
-    let [_, _, Token::Tuple(proof)] = parsed_input.as_slice() else {
+    let Token::Tuple(proof) = parsed_input.as_slice().last().unwrap() else {
         return Err(StatusCode::InvalidTupleTypes);
     };
 
@@ -351,11 +358,11 @@ pub async fn fetch_batch_commit_tx(
 
     let domain;
     if network == "sepolia" {
-        domain = "https://sepolia.era.zksync.dev"
+        domain = "https://sepolia.era.zksync.dev";
     } else if network == "mainnet" {
-        domain = "https://mainnet.era.zksync.io"
+        domain = "https://mainnet.era.zksync.io";
     } else {
-        domain = "https://testnet.era.zksync.dev"
+        domain = "https://dev-api.era-stage-proofs.zksync.dev";
     }
     let client = reqwest::Client::new();
 
@@ -407,11 +414,11 @@ pub async fn fetch_batch_protocol_version(
 
     let domain;
     if network == "sepolia" {
-        domain = "https://sepolia.era.zksync.dev"
+        domain = "https://sepolia.era.zksync.dev";
     } else if network == "mainnet" {
-        domain = "https://mainnet.era.zksync.io"
+        domain = "https://mainnet.era.zksync.io";
     } else {
-        domain = "https://testnet.era.zksync.dev"
+        domain = "https://dev-api.era-stage-proofs.zksync.dev";
     }
     let client = reqwest::Client::new();
 
@@ -509,7 +516,7 @@ fn find_state_data_from_log(
     }
 
     let mut parsed_input = function.decode_input(&calldata[4..]).unwrap();
-    assert_eq!(parsed_input.len(), 2);
+    
     let second_param = parsed_input.pop().unwrap();
     let first_param = parsed_input.pop().unwrap();
 
