@@ -104,14 +104,18 @@ pub async fn fetch_l1_commit_data(
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
 
-    let function_name: &str;
-    if !protocol_version.is_post_1_5_0() {
-        function_name = "commitBatches";
+    let (function_name, fallback_fn_name) = if !protocol_version.is_post_1_5_0() {
+        ("commitBatches", None)
     } else {
-        function_name = "commitBatchesSharedBridge";
-    }
+        ("commitBatchesSharedBridge", Some("commitBatches"))
+    };
 
     let function = contract_abi.functions_by_name(&function_name).unwrap()[0].clone();
+    let fallback_function = match fallback_fn_name {
+        None => None,
+        Some(fn_name) => Some(contract_abi.functions_by_name(&fn_name).unwrap()[0].clone()),
+    };
+
     let previous_batch_number = batch_number - 1;
     let address = get_diamond_proxy_address(network.to_string());
 
@@ -142,7 +146,8 @@ pub async fn fetch_l1_commit_data(
         l1_block_number = tx.block_number.unwrap().as_u64();
         calldata = tx.input.to_vec();
 
-        let found_data = find_state_data_from_log(b_number, &function, &calldata);
+        let found_data =
+            find_state_data_from_log(b_number, &function, fallback_function.clone(), &calldata);
 
         if found_data.is_err() || found_data.clone().unwrap().is_none() {
             return Err(StatusCode::InvalidLog);
@@ -503,6 +508,7 @@ pub async fn fetch_batch_protocol_version(
 fn find_state_data_from_log(
     batch_number: u64,
     function: &Function,
+    fallback_function: Option<Function>,
     calldata: &[u8],
 ) -> Result<Option<(u64, Vec<u8>)>, StatusCode> {
     use ethers::abi;
@@ -511,7 +517,12 @@ fn find_state_data_from_log(
         return Err(StatusCode::BadCalldataLength);
     }
 
-    let mut parsed_input = function.decode_input(&calldata[4..]).unwrap();
+    let mut parsed_input = function.decode_input(&calldata[4..]).unwrap_or_else(|_| {
+        fallback_function
+            .unwrap()
+            .decode_input(&calldata[4..])
+            .unwrap()
+    });
 
     let second_param = parsed_input.pop().unwrap();
     let first_param = parsed_input.pop().unwrap();
