@@ -103,7 +103,7 @@ pub async fn fetch_l1_commit_data(
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
-    
+
     let function_name: &str;
     if !protocol_version.is_post_1_5_0() {
         function_name = "commitBatches";
@@ -512,7 +512,7 @@ fn find_state_data_from_log(
     }
 
     let mut parsed_input = function.decode_input(&calldata[4..]).unwrap();
-    
+
     let second_param = parsed_input.pop().unwrap();
     let first_param = parsed_input.pop().unwrap();
 

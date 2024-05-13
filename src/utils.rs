@@ -23,3 +23,15 @@ pub async fn ensure_key_file_exists(file_path: &String, err_msg: &String) {
         std::process::exit(1)
     }
 }
+
+pub fn get_scheduler_key_override(
+    network: &str,
+    protocol_version: &str,
+    batch_number: u64,
+) -> Option<String> {
+    if protocol_version == "24" && network == "sepolia" && batch_number <= 8853u64 {
+        Some("src/keys/protocol_version/24/scheduler_key_old.json".to_string())
+    } else {
+        None
+    }
+}

@@ -27,8 +27,8 @@ use crate::requests::L1BatchAndProofData;
 use crate::snark_wrapper_verifier::{
     generate_solidity_test, verify_snark, verify_snark_from_storage, L1BatchProofForL1,
 };
-use crate::utils::check_verification_key;
 use crate::utils::ensure_key_file_exists;
+use crate::utils::{check_verification_key, get_scheduler_key_override};
 pub mod block_header;
 
 use circuit_definitions::boojum::{
@@ -217,7 +217,13 @@ async fn main() {
 
         let contract = ContractConfig::new(l1_rpc.clone().unwrap(), network.clone());
 
-        let resp = requests::fetch_l1_data(batch_number, protocol_version_id, &network, &l1_rpc.clone().unwrap()).await;
+        let resp = requests::fetch_l1_data(
+            batch_number,
+            protocol_version_id,
+            &network,
+            &l1_rpc.clone().unwrap(),
+        )
+        .await;
 
         let output = if let Ok(L1BatchAndProofData {
             aux_output,
@@ -229,12 +235,16 @@ async fn main() {
         {
             let vk_hash = contract.get_verification_key_hash(block_number).await;
 
-            let snark_vk_scheduler_key_file = match scheduler_key_override {
-                None => format!(
+            let snark_vk_scheduler_key_file = match (
+                scheduler_key_override,
+                get_scheduler_key_override(&network, &protocol_version, batch_number),
+            ) {
+                (None, None) => format!(
                     "src/keys/protocol_version/{}/scheduler_key.json",
                     protocol_version.clone()
                 ),
-                Some(scheduler_key_str) => scheduler_key_str,
+                (None, Some(scheduler_key)) => scheduler_key,
+                (Some(scheduler_key_str), _) => scheduler_key_str,
             };
 
             let mut batch_proof = L1BatchProofForL1 {
