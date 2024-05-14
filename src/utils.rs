@@ -29,6 +29,9 @@ pub fn get_scheduler_key_override(
     protocol_version: &str,
     batch_number: u64,
 ) -> Option<String> {
+    // This override is needed because we discovered a deviation between our in and out of circuit
+    // vms. The choice was made to update the verifier vs bumping the protocol version as it would have 
+    // required a batch rollback.
     if protocol_version == "24" && network == "sepolia" && batch_number <= 8853u64 {
         Some("src/keys/protocol_version/24/scheduler_key_old.json".to_string())
     } else {
