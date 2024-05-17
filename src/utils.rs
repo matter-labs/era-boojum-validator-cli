@@ -32,9 +32,14 @@ pub fn get_scheduler_key_override(
     // This override is needed because we discovered a deviation between our in and out of circuit
     // vms. The choice was made to update the verifier vs bumping the protocol version as it would have 
     // required a batch rollback.
-    if protocol_version == "24" && network == "sepolia" && batch_number <= 8853u64 {
-        Some("src/keys/protocol_version/24/scheduler_key_old.json".to_string())
-    } else {
-        None
+    if network == "sepolia" {
+        if protocol_version == "24" {
+            if batch_number <= 8853u64 {
+                return Some("src/keys/protocol_version/24/scheduler_key_v0.json".to_string());
+            } else if batch_number < 8923u64 {
+                return Some("src/keys/protocol_version/24/scheduler_key_v1.json".to_string());
+            }
+        }
     }
+    None
 }
