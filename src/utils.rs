@@ -38,8 +38,7 @@ pub fn get_scheduler_key_override(
                 return Some("src/keys/protocol_version/24/scheduler_key_v0.json".to_string());
             } else if batch_number < 8923u64 {
                 return Some("src/keys/protocol_version/24/scheduler_key_v1.json".to_string());
-            // update this once we deploy to testnet
-            } else if batch_number < 0u64 {
+            } else if batch_number < 9218u64 {
                 return Some("src/keys/protocol_version/24/scheduler_key_v2.json".to_string());
             }
         }
