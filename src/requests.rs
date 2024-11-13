@@ -12,7 +12,7 @@ use ethers::providers::{Http, Middleware, Provider};
 use ethers::types::TxHash;
 use once_cell::sync::Lazy;
 use primitive_types::U256;
-use zksync_types::{ethabi, ProtocolVersionId, H256};
+use zksync_types::{ethabi, H256};
 
 use crate::block_header::{self, BlockAuxilaryOutput, VerifierParams};
 use crate::contract::get_diamond_proxy_address;
@@ -64,7 +64,7 @@ pub struct AuxOutputWitnessWrapper(
 
 pub async fn fetch_l1_data(
     batch_number: u64,
-    protocol_version: ProtocolVersionId,
+    protocol_version: u16,
     network: &str,
     rpc_url: &str,
 ) -> Result<L1BatchAndProofData, StatusCode> {
@@ -96,7 +96,7 @@ pub async fn fetch_l1_data(
 
 pub async fn fetch_l1_commit_data(
     batch_number: u64,
-    protocol_version: ProtocolVersionId,
+    protocol_version: u16,
     network: &str,
     rpc_url: &str,
 ) -> Result<(BatchL1Data, BlockAuxilaryOutput), StatusCode> {
@@ -104,7 +104,7 @@ pub async fn fetch_l1_commit_data(
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
 
-    let (function_name, fallback_fn_name) = if !protocol_version.is_post_1_5_0() {
+    let (function_name, fallback_fn_name) = if protocol_version < 23 {
         ("commitBatches", None)
     } else {
         ("commitBatchesSharedBridge", Some("commitBatches"))
@@ -241,13 +241,13 @@ pub async fn fetch_proof_from_l1(
     batch_number: u64,
     network: &str,
     rpc_url: &str,
-    protocol_version: ProtocolVersionId,
+    protocol_version: u16,
 ) -> Result<(L1BatchProofForL1, u64), StatusCode> {
     let client = Provider::<Http>::try_from(rpc_url).expect("Failed to connect to provider");
 
     let contract_abi: Abi = Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap();
 
-    let function_name = if !protocol_version.is_post_1_5_0() {
+    let function_name = if protocol_version < 23 {
         "proveBatches"
     } else {
         "proveBatchesSharedBridge"
