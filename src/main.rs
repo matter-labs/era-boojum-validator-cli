@@ -9,7 +9,6 @@ use gag::Gag;
 use serde::Deserialize;
 use std::io::Read;
 use std::{fs::File, process};
-use zksync_types::ProtocolVersionId;
 
 mod contract;
 mod inputs;
@@ -212,8 +211,7 @@ async fn main() {
             }
         }
 
-        let protocol_version_id: ProtocolVersionId =
-            protocol_version.parse::<u16>().unwrap().try_into().unwrap();
+        let protocol_version_id = protocol_version.parse::<u16>().unwrap();
 
         let contract = ContractConfig::new(l1_rpc.clone().unwrap(), network.clone());
 
