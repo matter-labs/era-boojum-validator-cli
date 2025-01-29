@@ -32,6 +32,7 @@ pub enum StatusCode {
     BadCalldataLength,
     FailedToCallRPCJsonError,
     FailedToCallRPCResponseError,
+    FailedToParseProof,
 }
 
 #[derive(Default)]

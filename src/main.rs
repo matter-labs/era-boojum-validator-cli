@@ -10,6 +10,7 @@ use serde::Deserialize;
 use std::io::Read;
 use std::{fs::File, process};
 
+mod batch;
 mod contract;
 mod inputs;
 mod outputs;
@@ -186,9 +187,10 @@ async fn main() {
         .await
         .unwrap();
 
-    let previous_batch_protocol_version = requests::fetch_batch_protocol_version(batch_number - 1, &network)
-        .await
-        .unwrap();
+    let previous_batch_protocol_version =
+        requests::fetch_batch_protocol_version(batch_number - 1, &network)
+            .await
+            .unwrap();
 
     println!("{}", "Fetching and validating the proof itself".on_blue());
     if l1_rpc.is_none() {

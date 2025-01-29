@@ -32,7 +32,7 @@ pub fn get_scheduler_key_override(
     batch_number: u64,
 ) -> Option<String> {
     // This override is needed because we discovered a deviation between our in and out of circuit
-    // vms. The choice was made to update the verifier vs bumping the protocol version as it would have 
+    // vms. The choice was made to update the verifier vs bumping the protocol version as it would have
     // required a batch rollback.
     if network == "sepolia" {
         if protocol_version == "24" {
@@ -56,7 +56,9 @@ pub fn get_abi_for_protocol_version(protocol_version: u16) -> Abi {
     }
 }
 
-pub fn get_commit_function_for_protocol_version(protocol_version: u16) -> (Function, Option<Function>) {
+pub fn get_commit_function_for_protocol_version(
+    protocol_version: u16,
+) -> (Function, Option<Function>) {
     let contract_abi = get_abi_for_protocol_version(protocol_version);
     let function_name = if protocol_version < 23 {
         "commitBatches"
@@ -69,7 +71,9 @@ pub fn get_commit_function_for_protocol_version(protocol_version: u16) -> (Funct
     (function, None)
 }
 
-pub fn get_prove_function_for_protocol_version(protocol_version: u16) -> (Function, Option<Function>) {
+pub fn get_prove_function_for_protocol_version(
+    protocol_version: u16,
+) -> (Function, Option<Function>) {
     let contract_abi = get_abi_for_protocol_version(protocol_version);
     let function_name = if protocol_version < 23 {
         "proveBatches"

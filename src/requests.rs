@@ -5,20 +5,22 @@ use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircu
 use circuit_definitions::snark_wrapper::franklin_crypto::bellman::bn256::Bn256;
 use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
 use colored::Colorize;
-use crypto::deserialize_proof;
-use ethers::abi::{Abi, Function, Token, ParamType};
+use ethers::abi::{Abi, Function};
 use ethers::contract::BaseContract;
 use ethers::providers::{Http, Middleware, Provider};
 use ethers::types::TxHash;
 use once_cell::sync::Lazy;
-use primitive_types::U256;
 use zksync_types::{ethabi, H256};
 
+use crate::batch::{parse_batch_proof, parse_commit_batch_info, CommitBatchInfo};
 use crate::block_header::{self, BlockAuxilaryOutput, VerifierParams};
 use crate::contract::get_diamond_proxy_address;
 use crate::outputs::StatusCode;
 use crate::snark_wrapper_verifier::L1BatchProofForL1;
-use crate::utils::{get_abi_for_protocol_version, get_commit_function_for_protocol_version, get_prove_function_for_protocol_version};
+use crate::utils::{
+    get_abi_for_protocol_version, get_commit_function_for_protocol_version,
+    get_prove_function_for_protocol_version,
+};
 
 pub static BLOCK_COMMIT_EVENT_SIGNATURE: Lazy<H256> = Lazy::new(|| {
     ethabi::long_signature(
@@ -125,8 +127,7 @@ pub async fn fetch_l1_commit_data(
         (previous_batch_number, previous_protocol_version),
         (batch_number, current_protocol_version),
     ] {
-        let (function, fallback_function) =
-            get_commit_function_for_protocol_version(protocol_version);
+        let (function, _) = get_commit_function_for_protocol_version(protocol_version);
 
         let commit_tx = fetch_batch_commit_tx(b_number, network).await;
 
@@ -149,13 +150,7 @@ pub async fn fetch_l1_commit_data(
         l1_block_number = tx.block_number.unwrap().as_u64();
         calldata = tx.input.to_vec();
 
-        let found_data = find_state_data_from_log(
-            b_number,
-            protocol_version,
-            &function,
-            fallback_function.clone(),
-            &calldata,
-        ).await;
+        let found_data = find_state_data_from_log(protocol_version, &function, &calldata);
 
         if found_data.is_err() || found_data.clone().unwrap().is_none() {
             return Err(StatusCode::InvalidLog);
@@ -192,7 +187,8 @@ pub async fn fetch_l1_commit_data(
     }
 
     let (function, _) = get_commit_function_for_protocol_version(current_protocol_version);
-    let aux_output = block_header::parse_aux_data(&function, &calldata, current_protocol_version).await;
+    let aux_output =
+        block_header::parse_aux_data(&function, &calldata, current_protocol_version).await;
 
     if aux_output.is_err() {
         return Err(aux_output.err().unwrap());
@@ -282,109 +278,17 @@ pub async fn fetch_proof_from_l1(
     let l1_block_number = tx.block_number.unwrap().as_u64();
     let calldata = tx.input.to_vec();
 
-    let parsed_input = function.decode_input(&calldata[4..]).unwrap();
+    let proof = parse_batch_proof(&function, &calldata, protocol_version, network);
 
-    if protocol_version < 26 {
-        let Token::Tuple(proof) = parsed_input.as_slice().last().unwrap() else {
-            return Err(StatusCode::InvalidTupleTypes);
-        };
-    
-        assert_eq!(proof.len(), 2);
-    
-        let Token::Array(serialized_proof) = proof[1].clone() else {
-            return Err(StatusCode::InvalidTupleTypes);
-        };
-    
-        let proof = serialized_proof
-            .iter()
-            .filter_map(|e| {
-                if let Token::Uint(x) = e {
-                    Some(x.clone())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<U256>>();
-    
-        if network != "mainnet" && serialized_proof.len() == 0 {
-            let msg = format!(
-                "Proof doesn't exist for batch {} on network {}, exiting...",
-                batch_number.to_string().red(),
-                network.red()
-            );
-            println!("{}", msg);
-            return Err(StatusCode::ProofDoesntExist);
-        }
-    
-        let x: Proof<Bn256, ZkSyncSnarkWrapperCircuit> = deserialize_proof(proof);
-        Ok((
+    match proof {
+        None => Err(StatusCode::FailedToParseProof),
+        Some(proof) => Ok((
             L1BatchProofForL1 {
                 aggregation_result_coords: [[0u8; 32]; 4],
-                scheduler_proof: x,
+                scheduler_proof: proof,
             },
             l1_block_number,
-        ))
-    } else {
-        let Token::Bytes(proof_data) = parsed_input.as_slice().last().unwrap() else {
-            return Err(StatusCode::InvalidTupleTypes);
-        };
-    
-        let stored_batch_info_params = ParamType::Tuple(
-            vec![
-                ParamType::Uint(64),
-                ParamType::FixedBytes(32),
-                ParamType::Uint(64),
-                ParamType::Uint(256),
-                ParamType::FixedBytes(32),
-                ParamType::FixedBytes(32),
-                ParamType::Uint(256),
-                ParamType::FixedBytes(32),
-            ]
-        );
-    
-        let combined_params = vec![
-            stored_batch_info_params.clone(),
-            ParamType::Array(Box::new(stored_batch_info_params)),
-            ParamType::Array(Box::new(ParamType::Uint(256)))
-        ];
-    
-        let proof = ethers::core::abi::decode(&combined_params, &proof_data[1..]).unwrap();
-    
-        assert_eq!(proof.len(), 3);
-    
-        let Token::Array(serialized_proof) = proof[2].clone() else {
-            return Err(StatusCode::InvalidTupleTypes);
-        };
-    
-        let proof = serialized_proof
-            .iter()
-            .filter_map(|e| {
-                if let Token::Uint(x) = e {
-                    Some(x.clone())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<U256>>();
-    
-        if network != "mainnet" && serialized_proof.len() == 0 {
-            let msg = format!(
-                "Proof doesn't exist for batch {} on network {}, exiting...",
-                batch_number.to_string().red(),
-                network.red()
-            );
-            println!("{}", msg);
-            return Err(StatusCode::ProofDoesntExist);
-        }
-    
-        let x: Proof<Bn256, ZkSyncSnarkWrapperCircuit> = deserialize_proof(proof);
-        Ok((
-            L1BatchProofForL1 {
-                aggregation_result_coords: [[0u8; 32]; 4],
-                scheduler_proof: x,
-            },
-            l1_block_number,
-        ))
+        )),
     }
 }
 
@@ -570,219 +474,34 @@ pub async fn fetch_batch_protocol_version(
     }
 }
 
-async fn find_state_data_from_log(
-    batch_number: u64,
+fn find_state_data_from_log(
     protocol_version: u16,
     function: &Function,
-    fallback_function: Option<Function>,
     calldata: &[u8],
 ) -> Result<Option<(u64, Vec<u8>)>, StatusCode> {
-    let (
-        _batch_number,
-        _timestamp,
-        index_repeated_storage_changes,
-        new_state_root,
-        _number_l1_txns,
-        _priority_operations_hash,
-        _bootloader_contents_hash,
-        _event_queue_state_hash,
-        _sys_logs,
-        _total_pubdata,
-    ) = parse_calldata_into_batch_commit(
-        batch_number,
-        protocol_version,
-        function,
-        fallback_function,
-        calldata
-    ).await.unwrap().unwrap();
+    let batch = parse_commit_batch_info(function, calldata, protocol_version);
 
-    Ok(Some((index_repeated_storage_changes.as_u64(), new_state_root)))
-}
+    match batch {
+        None => Err(StatusCode::FailedToDeconstruct),
+        Some(batch_commit) => {
+            let CommitBatchInfo {
+                batch_number: _,
+                timestamp: _,
+                index_repeated_storage_changes,
+                new_state_root,
+                number_l1_txns: _,
+                priority_operations_hash: _,
+                bootloader_contents_hash: _,
+                event_queue_state_hash: _,
+                sys_logs: _,
+                total_pubdata: _,
+            } = batch_commit;
 
-async fn parse_calldata_into_batch_commit(
-    batch_number: u64,
-    protocol_version: u16,
-    function: &Function,
-    fallback_function: Option<Function>,
-    calldata: &[u8],
-) -> Result<Option<(U256, U256, U256, Vec<u8>, U256, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)>, StatusCode> {
-    use ethers::abi;
-
-    if calldata.len() < 5 {
-        return Err(StatusCode::BadCalldataLength);
-    }
-
-    let mut parsed_input = function.decode_input(&calldata[4..]).unwrap_or_else(|_| {
-        fallback_function
-            .unwrap()
-            .decode_input(&calldata[4..])
-            .unwrap()
-    });
-
-    if protocol_version < 26 {
-        let second_param = parsed_input.pop().unwrap();
-        let first_param = parsed_input.pop().unwrap();
-
-        let abi::Token::Tuple(first_param) = first_param else {
-            return Err(StatusCode::FailedToDeconstruct);
-        };
-
-        let abi::Token::Uint(previous_l2_block_number) = first_param[0].clone() else {
-            return Err(StatusCode::FailedToDeconstruct);
-        };
-        if previous_l2_block_number.as_u64() >= batch_number {
-            return Err(StatusCode::InvalidLog);
+            Ok(Some((
+                index_repeated_storage_changes.as_u64(),
+                new_state_root,
+            )))
         }
-        let abi::Token::Uint(previous_enumeration_index) = first_param[2].clone() else {
-            return Err(StatusCode::FailedToDeconstruct);
-        };
-        let _previous_enumeration_index = previous_enumeration_index.0[0];
-
-        let abi::Token::Array(inner) = second_param else {
-            return Err(StatusCode::FailedToDeconstruct);
-        };
-
-        let mut found_params = None;
-
-        for inner in inner.into_iter() {
-            let abi::Token::Tuple(inner) = inner else {
-                return Err(StatusCode::FailedToDeconstruct);
-            };
-            
-            let [
-                abi::Token::Uint(batch_number), 
-                abi::Token::Uint(timestamp), 
-                abi::Token::Uint(index_repeated_storage_changes), 
-                abi::Token::FixedBytes(new_state_root), 
-                abi::Token::Uint(number_l1_txns), 
-                abi::Token::FixedBytes(priority_operations_hash), 
-                abi::Token::FixedBytes(bootloader_contents_hash), 
-                abi::Token::FixedBytes(event_queue_state_hash), 
-                abi::Token::Bytes(sys_logs), 
-                abi::Token::Bytes(total_pubdata)
-            ] =
-                inner.as_slice()
-            else {
-                return Err(StatusCode::FailedToDeconstruct);
-            };
-
-            found_params = Some((
-                batch_number.clone(),
-                timestamp.clone(),
-                index_repeated_storage_changes.clone(),
-                new_state_root.clone(),
-                number_l1_txns.clone(),
-                priority_operations_hash.clone(),
-                bootloader_contents_hash.clone(),
-                event_queue_state_hash.clone(),
-                sys_logs.clone(),
-                total_pubdata.clone(),
-            ));
-            
-        }
-
-        Ok(found_params)
-    } else {
-        assert_eq!(parsed_input.len(), 4);
-
-        let commit_data = parsed_input.pop().unwrap();
-
-        let abi::Token::Bytes(mut commit_data_bytes) = commit_data else {
-            return Err(StatusCode::FailedToDeconstruct);
-        };
-
-        commit_data_bytes = commit_data_bytes[1..].to_vec();
-
-        let stored_batch_info_params = ParamType::Tuple(
-            vec![
-                ParamType::Uint(64),
-                ParamType::FixedBytes(32),
-                ParamType::Uint(64),
-                ParamType::Uint(256),
-                ParamType::FixedBytes(32),
-                ParamType::FixedBytes(32),
-                ParamType::Uint(256),
-                ParamType::FixedBytes(32),
-            ]
-        );
-
-        let commit_batch_info_params = ParamType::Tuple(
-            vec![
-                ParamType::Uint(64),
-                ParamType::Uint(64),
-                ParamType::Uint(64),
-                ParamType::FixedBytes(32),
-                ParamType::Uint(256),
-                ParamType::FixedBytes(32),
-                ParamType::FixedBytes(32),
-                ParamType::FixedBytes(32),
-                ParamType::Bytes,
-                ParamType::Bytes,
-            ]
-        );
-
-        let combined_params = vec![
-            stored_batch_info_params,
-            ParamType::Array(Box::new(commit_batch_info_params))
-        ];
-
-        let res = ethers::core::abi::decode(&combined_params, &commit_data_bytes);
-
-        
-        if res.is_err() {
-            return Err(StatusCode::FailedToDeconstruct);
-        }
-        
-        let decoded_input = res.unwrap();
-        
-        if decoded_input.len() != 2 {
-            return Err(StatusCode::FailedToDeconstruct);
-        }
-        
-        let abi::Token::Array(commit_batches) = decoded_input[1].clone() else {
-            return Err(StatusCode::FailedToDeconstruct);
-        };
-
-        if commit_batches.len() != 1 {
-            return Err(StatusCode::FailedToDeconstruct);
-        }
-        
-        let abi::Token::Tuple(commit_batch) = commit_batches[0].clone() else {
-            return Err(StatusCode::FailedToDeconstruct);
-        };
-
-        if commit_batch.len() != 10 {
-            return Err(StatusCode::FailedToDeconstruct);
-        };
-
-        let [
-                abi::Token::Uint(batch_number), 
-                abi::Token::Uint(timestamp), 
-                abi::Token::Uint(index_repeated_storage_changes), 
-                abi::Token::FixedBytes(new_state_root), 
-                abi::Token::Uint(number_l1_txns), 
-                abi::Token::FixedBytes(priority_operations_hash), 
-                abi::Token::FixedBytes(bootloader_contents_hash), 
-                abi::Token::FixedBytes(event_queue_state_hash), 
-                abi::Token::Bytes(sys_logs), 
-                abi::Token::Bytes(total_pubdata)
-            ] = commit_batch.as_slice()
-        else {
-            return Err(StatusCode::FailedToDeconstruct);
-        };
-
-        Ok(Some((
-            batch_number.clone(),
-            timestamp.clone(),
-            index_repeated_storage_changes.clone(),
-            new_state_root.clone(),
-            number_l1_txns.clone(),
-            priority_operations_hash.clone(),
-            bootloader_contents_hash.clone(),
-            event_queue_state_hash.clone(),
-            sys_logs.clone(),
-            total_pubdata.clone(),
-        )))
     }
 }
 
