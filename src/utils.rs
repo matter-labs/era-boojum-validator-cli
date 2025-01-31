@@ -1,5 +1,7 @@
 use std::env;
 
+use ethers::abi::{Abi, Function};
+
 /// Checks to see if the verification key exists for a given protocol version or an update has been requested and downloads it from github if needed.
 pub async fn check_verification_key(protocol_version: String) {
     let file_path = format!(
@@ -30,7 +32,7 @@ pub fn get_scheduler_key_override(
     batch_number: u64,
 ) -> Option<String> {
     // This override is needed because we discovered a deviation between our in and out of circuit
-    // vms. The choice was made to update the verifier vs bumping the protocol version as it would have 
+    // vms. The choice was made to update the verifier vs bumping the protocol version as it would have
     // required a batch rollback.
     if network == "sepolia" {
         if protocol_version == "24" {
@@ -44,4 +46,42 @@ pub fn get_scheduler_key_override(
         }
     }
     None
+}
+
+pub fn get_abi_for_protocol_version(protocol_version: u16) -> Abi {
+    if protocol_version < 26 {
+        Abi::load(&include_bytes!("../abis/IZkSync.json")[..]).unwrap()
+    } else {
+        Abi::load(&include_bytes!("../abis/IZKChain.json")[..]).unwrap()
+    }
+}
+
+pub fn get_commit_function_for_protocol_version(
+    protocol_version: u16,
+) -> (Function, Option<Function>) {
+    let contract_abi = get_abi_for_protocol_version(protocol_version);
+    let function_name = if protocol_version < 23 {
+        "commitBatches"
+    } else {
+        "commitBatchesSharedBridge"
+    };
+
+    let function = contract_abi.functions_by_name(&function_name).unwrap()[0].clone();
+
+    (function, None)
+}
+
+pub fn get_prove_function_for_protocol_version(
+    protocol_version: u16,
+) -> (Function, Option<Function>) {
+    let contract_abi = get_abi_for_protocol_version(protocol_version);
+    let function_name = if protocol_version < 23 {
+        "proveBatches"
+    } else {
+        "proveBatchesSharedBridge"
+    };
+
+    let function = contract_abi.functions_by_name(&function_name).unwrap()[0].clone();
+
+    (function, None)
 }

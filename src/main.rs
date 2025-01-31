@@ -10,6 +10,7 @@ use serde::Deserialize;
 use std::io::Read;
 use std::{fs::File, process};
 
+mod batch;
 mod contract;
 mod inputs;
 mod outputs;
@@ -186,6 +187,11 @@ async fn main() {
         .await
         .unwrap();
 
+    let previous_batch_protocol_version =
+        requests::fetch_batch_protocol_version(batch_number - 1, &network)
+            .await
+            .unwrap();
+
     println!("{}", "Fetching and validating the proof itself".on_blue());
     if l1_rpc.is_none() {
         println!(
@@ -212,12 +218,14 @@ async fn main() {
         }
 
         let protocol_version_id = protocol_version.parse::<u16>().unwrap();
+        let previous_protocol_version_id = previous_batch_protocol_version.parse::<u16>().unwrap();
 
         let contract = ContractConfig::new(l1_rpc.clone().unwrap(), network.clone());
 
         let resp = requests::fetch_l1_data(
             batch_number,
             protocol_version_id,
+            previous_protocol_version_id,
             &network,
             &l1_rpc.clone().unwrap(),
         )
