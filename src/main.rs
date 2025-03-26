@@ -1,10 +1,11 @@
 #![feature(array_chunks)]
-#![feature(slice_flatten)]
 
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use contract::{FFLONK_VERIFICATION_TYPE, PLONK_VERIFICATION_TYPE};
+use crypto::types::ProofType;
 use gag::Gag;
 use serde::Deserialize;
 use std::io::Read;
@@ -83,6 +84,7 @@ pub struct VerifySnarkWrapperArgs {
     l1_batch_proof_file: String,
     /// Snark verification scheduler key (like snark_verification_scheduler_key.json)
     snark_vk_scheduler_key_file: String,
+    fflonk_vk_scheduler_key_file: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -97,7 +99,8 @@ pub fn proof_from_file<T: for<'a> Deserialize<'a>>(proof_path: &str) -> T {
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer).unwrap();
 
-    let proof: T = bincode::deserialize(buffer.as_slice()).unwrap();
+    let (proof, _) =
+        bincode::serde::decode_from_slice(&buffer.as_slice(), bincode::config::legacy()).unwrap();
     proof
 }
 
@@ -169,7 +172,7 @@ async fn main() {
         None
     };
 
-    if network != "mainnet" && network != "sepolia" {
+    if network != "mainnet" && network != "sepolia" && network != "stage-proofs" {
         println!(
             "Please use network name `{}` or `{}`",
             "mainnet".yellow(),
@@ -239,7 +242,32 @@ async fn main() {
             block_number,
         }) = resp.clone()
         {
-            let vk_hash = contract.get_verification_key_hash(block_number).await;
+            let (plonk_vk, flonk_vk) = if protocol_version_id < 27 {
+                let plonk_vk_hash = contract
+                    .get_verification_key_hash(
+                        block_number,
+                        protocol_version_id,
+                        Some(PLONK_VERIFICATION_TYPE),
+                    )
+                    .await;
+                (plonk_vk_hash, None)
+            } else {
+                let plonk_vk_hash = contract
+                    .get_verification_key_hash(
+                        block_number,
+                        protocol_version_id,
+                        Some(PLONK_VERIFICATION_TYPE),
+                    )
+                    .await;
+                let fflonk_vk_hash = contract
+                    .get_verification_key_hash(
+                        block_number,
+                        protocol_version_id,
+                        Some(FFLONK_VERIFICATION_TYPE),
+                    )
+                    .await;
+                (plonk_vk_hash, Some(fflonk_vk_hash))
+            };
 
             let snark_vk_scheduler_key_file = match (
                 scheduler_key_override,
@@ -258,15 +286,32 @@ async fn main() {
                 scheduler_proof,
             };
 
+            let fflonk_scheduler_key = if protocol_version_id >= 27 {
+                Some(format!(
+                    "src/keys/protocol_version/{}/fflonk_scheduler_key.json",
+                    protocol_version.clone()
+                ))
+            } else {
+                None
+            };
+
             let inputs = generate_inputs(batch_l1_data, verifier_params, Some(protocol_version_id));
 
-            batch_proof.scheduler_proof.inputs = inputs;
-
+            match batch_proof.scheduler_proof {
+                ProofType::Fflonk(ref mut proof) => {
+                    proof.inputs = inputs;
+                }
+                ProofType::Plonk(ref mut proof) => {
+                    proof.inputs = inputs;
+                }
+            }
             // First, we verify that the proof itself is valid.
             let verify_resp = verify_snark(
                 snark_vk_scheduler_key_file.to_string(),
+                fflonk_scheduler_key,
                 batch_proof,
-                Some(vk_hash),
+                Some(plonk_vk),
+                flonk_vk,
             )
             .await;
 
@@ -276,7 +321,7 @@ async fn main() {
             if let Ok((input, _, computed_vk_hash)) = verify_resp {
                 let mut inner_data = DataJsonOutput::from(resp.unwrap());
                 inner_data.verification_key_hash = construct_vk_output(
-                    vk_hash.to_fixed_bytes(),
+                    plonk_vk.to_fixed_bytes(),
                     computed_vk_hash.to_fixed_bytes(),
                 );
 
@@ -298,7 +343,7 @@ async fn main() {
                 data,
             }
         } else {
-            let status_code = resp.unwrap_err();
+            let status_code = resp.err().unwrap();
             println!(
                 "Failed to verify proof due to error code: {:?}",
                 status_code
@@ -348,6 +393,7 @@ mod test {
             l1_batch_proof_file: "example_proofs/snark_wrapper/v3/l1_batch_proof_1.bin".to_string(),
             snark_vk_scheduler_key_file:
                 "example_proofs/snark_wrapper/v3/snark_verification_scheduler_key.json".to_string(),
+            fflonk_vk_scheduler_key_file: None,
         })
         .await
         .unwrap();
@@ -419,10 +465,8 @@ mod test {
 
         println!("Proof type: {}", proof.short_description().bold());
 
-        let verifier_builder = StorageApplicationVerifierBuilder::<
-            GoldilocksField,
-            ZkSyncDefaultRoundFunction,
-        >::dyn_verifier_builder::<GoldilocksExt2>();
+        let verifier_builder =
+            StorageApplicationVerifierBuilder::dyn_verifier_builder::<GoldilocksExt2>();
         let verifier = verifier_builder.create_verifier();
 
         let result = verifier.verify::<BaseProofsTreeHasher, GoldilocksPoisedon2Transcript, NoPow>(

@@ -1,4 +1,5 @@
-use circuit_definitions::snark_wrapper::franklin_crypto::bellman::compact_bn256::{Fq, Fr};
+use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuitNoLookupCustomGate;
+use circuit_definitions::snark_wrapper::franklin_crypto::bellman::compact_bn256::Fq;
 use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::cs::Circuit;
 use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
 use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::setup::VerificationKey;
@@ -10,9 +11,15 @@ use circuit_definitions::{
         CurveAffine, Engine, PrimeField,
     },
 };
+use fflonk::{
+    bellman::Field,
+    {FflonkProof, FflonkVerificationKey},
+};
 use primitive_types::H256;
+use zksync_pairing::{bn256::Fr, ff::from_hex};
 
 pub mod serialize;
+pub mod types;
 
 /// Transform an element represented as a U256 into a prime field element.
 fn hex_to_scalar<F: PrimeField>(el: &U256) -> F {
@@ -133,6 +140,70 @@ pub fn deserialize_proof<T: Circuit<Bn256>>(mut proof: Vec<U256>) -> Proof<Bn256
     proof
 }
 
+pub fn deserialize_fflonk_proof(
+    mut proof: Vec<U256>,
+) -> FflonkProof<Bn256, ZkSyncSnarkWrapperCircuitNoLookupCustomGate> {
+    let serialized_product = proof.pop().unwrap();
+    let _product = deserialize_fe(serialized_product);
+
+    let mut evaluations = vec![];
+    for _ in 0..15 {
+        let eval = proof.pop().unwrap();
+        let eval_fr = deserialize_fe(eval);
+        evaluations.push(eval_fr);
+    }
+    evaluations.reverse();
+
+    let mut commitments = vec![];
+    for _ in 0..4 {
+        let y = proof.pop().unwrap();
+        let x = proof.pop().unwrap();
+        let point = deserialize_g1((x, y));
+        commitments.push(point);
+    }
+    commitments.reverse();
+
+    let mut proof: FflonkProof<Bn256, ZkSyncSnarkWrapperCircuitNoLookupCustomGate> =
+        FflonkProof::empty();
+        
+    dbg!(evaluations.clone().len());
+    proof.commitments = commitments;
+    proof.evaluations = evaluations;
+
+
+    let lagrange_inverses = vec![
+        from_hex::<Fr>("2aa0b808af4b4cf7459acd1242deffbe0635b9b61dd07a5bdbd6a5e64722d9eb").unwrap(),
+        from_hex::<Fr>("04c78a2a55d26ca00ac6c81a7034a45aff01767a6325fc688ad73a88c20e7b90").unwrap(),
+        from_hex::<Fr>("2ca357ec2ad41182182ba0bf51b4064f9d81ddff0c5f4dc50eac3f6bb34f462e").unwrap(),
+        from_hex::<Fr>("1fa0ae7e31ffcec65be121ece559f9fbb34ae6fecd7529e50e30cf0fcd1d456f").unwrap(),
+        from_hex::<Fr>("084b4f868de36f1b785a2bd8485dadc3a9379a9565c862b9da5fd54eeffbab58").unwrap(),
+        from_hex::<Fr>("08fd242f48351f9550cb7207d93f03620007f16ddb2faa56f54721e44291bb0b").unwrap(),
+        from_hex::<Fr>("1defbd7f02f3f44b835b1bcb495e00312f897b9d0c9e38f71607264866f7ebf9").unwrap(),
+        from_hex::<Fr>("17019857407365df3fdd7d7a1d541f78c66e90a35b12bfb72deceec1380fc049").unwrap(),
+        from_hex::<Fr>("28ebc69f2f4b56856de00b67b0753bf6c4f9cc2f81a643f2cd4625f789375406").unwrap(),
+        from_hex::<Fr>("1909b80e40ac6ff599a70ce92373bb699734a6348ef401c4f1b646ff7ac98221").unwrap(),
+        from_hex::<Fr>("28d3fee68dadff8d9792128351cb25741223a72f0d57ffeb5fa6261dfad4b52c").unwrap(),
+        from_hex::<Fr>("1b42778d2e4a262a9b82d35a6fb04987781275793188ba7d6fdcce70bb012dce").unwrap(),
+        from_hex::<Fr>("1d9b8f467da3835561187d58aec32cf8678d439635c6dff68be239716e5fb3bc").unwrap(),
+        from_hex::<Fr>("0b31d349c44fe72cb4ac65e05677dbd4ceeac309816e1110bbd651ff7af70a72").unwrap(),
+        from_hex::<Fr>("2488041da3c41e1ef004498f9516ce6a944d2f76d90c3e3f55553b44609659d2").unwrap(),
+        from_hex::<Fr>("2960b2577f0fb7a28724442fc9afd810b6d1034357f6ee3e79449332e3a65aab").unwrap(),
+        from_hex::<Fr>("0d2fe6f1cbced57abf849dac3bfc86510ddd43f967b6172648c7dc5a5625e9e0").unwrap(),
+        from_hex::<Fr>("0e2b84a195708caadb467c542a4191d3af605ef6484a8803e43222f85cc0603e").unwrap(),
+    ];
+
+    let mut product = lagrange_inverses[0];
+    for i in 1..lagrange_inverses.len() {
+        product.mul_assign(&lagrange_inverses[i]);
+    }
+
+    assert_eq!(product, _product);
+
+    proof.lagrange_basis_inverses = lagrange_inverses;
+
+    proof
+}
+
 /// Calculates the hash of a verification key. This function corresponds 1:1 with the following solidity code: https://github.com/matter-labs/era-contracts/blob/3e2bee96e412bac7c0a58c4b919837b59e9af36e/ethereum/contracts/zksync/Verifier.sol#L260
 pub fn calculate_verification_key_hash<E: Engine, C: Circuit<E>>(
     verification_key: VerificationKey<E, C>,
@@ -199,16 +270,60 @@ pub fn calculate_verification_key_hash<E: Engine, C: Circuit<E>>(
     H256::from_slice(&computed_vk_hash)
 }
 
+pub fn calculate_fflonk_verification_key_hash<E: Engine, C: Circuit<E>>(
+    verification_key: FflonkVerificationKey<E, C>,
+) -> H256 {
+    use sha3::Digest;
+
+    let mut res = vec![0u8; 32];
+
+    // NUM INPUTS
+    // Writing as u256 to comply with the contract
+    let num_inputs = U256::from(verification_key.num_inputs);
+    num_inputs.to_big_endian(&mut res[0..32]);
+
+    // C0 G1
+    let c0_g1 = verification_key.c0;
+    let (x, y) = c0_g1.as_xy();
+
+    let _ = x.into_repr().write_be(&mut res);
+    let _ = y.into_repr().write_be(&mut res);
+
+    // NON RESIDUES
+    let non_residues = verification_key.non_residues;
+    for non_residue in non_residues {
+        let _ = non_residue.into_repr().write_be(&mut res);
+    }
+
+    // G2 ELEMENTS
+    let g2_elements = verification_key.g2_elements;
+    for g2_element in g2_elements {
+        res.extend(g2_element.into_uncompressed().as_ref());
+    }
+
+    let mut hasher = sha3::Keccak256::new();
+    hasher.update(&res);
+    let computed_vk_hash = hasher.finalize();
+
+    H256::from_slice(&computed_vk_hash)
+}
+
 #[cfg(test)]
 mod test {
-    use std::{fs::{self, File}, str::FromStr, io::Read};
-    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::{proof::Proof, setup::VerificationKey};
-    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::pairing::bn256::Bn256;
-    use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
-    use primitive_types::H256;
-    use serde::Deserialize;
     use crate::deserialize_proof;
     use crate::serialize::serialize_proof;
+    use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::pairing::bn256::Bn256;
+    use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::{
+        proof::Proof, setup::VerificationKey,
+    };
+    use primitive_types::H256;
+    use serde::Deserialize;
+    use std::{
+        fs::{self, File},
+        io::Read,
+        str::FromStr,
+    };
 
     use super::calculate_verification_key_hash;
 
@@ -223,19 +338,22 @@ mod test {
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer).unwrap();
 
-        let proof: T = bincode::deserialize(buffer.as_slice()).unwrap();
+        let (proof, _) =
+            bincode::serde::decode_from_slice(&buffer.as_slice(), bincode::config::legacy())
+                .unwrap();
         proof
     }
 
     #[test]
     fn test_verification_key_hash() {
         let vk_inner: VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit> =
-            serde_json::from_str(&fs::read_to_string("keys/scheduler_key.json").unwrap())
-                .unwrap();
+            serde_json::from_str(&fs::read_to_string("keys/scheduler_key.json").unwrap()).unwrap();
 
         let verification_key_hash = calculate_verification_key_hash(vk_inner);
 
-        let exprected_vk_hash = H256::from_str("0x750d8e21be7555a6841472a5cacd24c75a7ceb34261aea61e72bb7423a7d30fc").unwrap();
+        let exprected_vk_hash =
+            H256::from_str("0x750d8e21be7555a6841472a5cacd24c75a7ceb34261aea61e72bb7423a7d30fc")
+                .unwrap();
 
         assert_eq!(verification_key_hash, exprected_vk_hash)
     }
@@ -244,27 +362,94 @@ mod test {
     fn test_proof_deserialization() {
         let proof: L1BatchProofForL1 = proof_from_file("proofs/l1_batch_proof_1.bin");
         let (_, serialized_proof) = serialize_proof(&proof.scheduler_proof);
-        let deserialized_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit> = deserialize_proof(serialized_proof);
+        let deserialized_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit> =
+            deserialize_proof(serialized_proof);
 
-        assert_eq!(proof.scheduler_proof.state_polys_commitments, deserialized_proof.state_polys_commitments);
-        assert_eq!(proof.scheduler_proof.copy_permutation_grand_product_commitment, deserialized_proof.copy_permutation_grand_product_commitment);
-        assert_eq!(proof.scheduler_proof.lookup_s_poly_commitment, deserialized_proof.lookup_s_poly_commitment);
-        assert_eq!(proof.scheduler_proof.lookup_grand_product_commitment, deserialized_proof.lookup_grand_product_commitment);
-        assert_eq!(proof.scheduler_proof.quotient_poly_parts_commitments, deserialized_proof.quotient_poly_parts_commitments);
-        assert_eq!(proof.scheduler_proof.state_polys_openings_at_z, deserialized_proof.state_polys_openings_at_z);
-        assert_eq!(proof.scheduler_proof.state_polys_openings_at_dilations, deserialized_proof.state_polys_openings_at_dilations);
-        assert_eq!(proof.scheduler_proof.gate_selectors_openings_at_z, deserialized_proof.gate_selectors_openings_at_z);
-        assert_eq!(proof.scheduler_proof.copy_permutation_polys_openings_at_z, deserialized_proof.copy_permutation_polys_openings_at_z);
-        assert_eq!(proof.scheduler_proof.copy_permutation_grand_product_opening_at_z_omega, deserialized_proof.copy_permutation_grand_product_opening_at_z_omega);
-        assert_eq!(proof.scheduler_proof.lookup_s_poly_opening_at_z_omega, deserialized_proof.lookup_s_poly_opening_at_z_omega);
-        assert_eq!(proof.scheduler_proof.lookup_grand_product_opening_at_z_omega, deserialized_proof.lookup_grand_product_opening_at_z_omega);
-        assert_eq!(proof.scheduler_proof.lookup_t_poly_opening_at_z, deserialized_proof.lookup_t_poly_opening_at_z);
-        assert_eq!(proof.scheduler_proof.lookup_t_poly_opening_at_z_omega, deserialized_proof.lookup_t_poly_opening_at_z_omega);
-        assert_eq!(proof.scheduler_proof.lookup_selector_poly_opening_at_z, deserialized_proof.lookup_selector_poly_opening_at_z);
-        assert_eq!(proof.scheduler_proof.lookup_table_type_poly_opening_at_z, deserialized_proof.lookup_table_type_poly_opening_at_z);
-        assert_eq!(proof.scheduler_proof.quotient_poly_opening_at_z, deserialized_proof.quotient_poly_opening_at_z);
-        assert_eq!(proof.scheduler_proof.linearization_poly_opening_at_z, deserialized_proof.linearization_poly_opening_at_z);
-        assert_eq!(proof.scheduler_proof.opening_proof_at_z, deserialized_proof.opening_proof_at_z);
-        assert_eq!(proof.scheduler_proof.opening_proof_at_z_omega, deserialized_proof.opening_proof_at_z_omega);
-    }    
+        assert_eq!(
+            proof.scheduler_proof.state_polys_commitments,
+            deserialized_proof.state_polys_commitments
+        );
+        assert_eq!(
+            proof
+                .scheduler_proof
+                .copy_permutation_grand_product_commitment,
+            deserialized_proof.copy_permutation_grand_product_commitment
+        );
+        assert_eq!(
+            proof.scheduler_proof.lookup_s_poly_commitment,
+            deserialized_proof.lookup_s_poly_commitment
+        );
+        assert_eq!(
+            proof.scheduler_proof.lookup_grand_product_commitment,
+            deserialized_proof.lookup_grand_product_commitment
+        );
+        assert_eq!(
+            proof.scheduler_proof.quotient_poly_parts_commitments,
+            deserialized_proof.quotient_poly_parts_commitments
+        );
+        assert_eq!(
+            proof.scheduler_proof.state_polys_openings_at_z,
+            deserialized_proof.state_polys_openings_at_z
+        );
+        assert_eq!(
+            proof.scheduler_proof.state_polys_openings_at_dilations,
+            deserialized_proof.state_polys_openings_at_dilations
+        );
+        assert_eq!(
+            proof.scheduler_proof.gate_selectors_openings_at_z,
+            deserialized_proof.gate_selectors_openings_at_z
+        );
+        assert_eq!(
+            proof.scheduler_proof.copy_permutation_polys_openings_at_z,
+            deserialized_proof.copy_permutation_polys_openings_at_z
+        );
+        assert_eq!(
+            proof
+                .scheduler_proof
+                .copy_permutation_grand_product_opening_at_z_omega,
+            deserialized_proof.copy_permutation_grand_product_opening_at_z_omega
+        );
+        assert_eq!(
+            proof.scheduler_proof.lookup_s_poly_opening_at_z_omega,
+            deserialized_proof.lookup_s_poly_opening_at_z_omega
+        );
+        assert_eq!(
+            proof
+                .scheduler_proof
+                .lookup_grand_product_opening_at_z_omega,
+            deserialized_proof.lookup_grand_product_opening_at_z_omega
+        );
+        assert_eq!(
+            proof.scheduler_proof.lookup_t_poly_opening_at_z,
+            deserialized_proof.lookup_t_poly_opening_at_z
+        );
+        assert_eq!(
+            proof.scheduler_proof.lookup_t_poly_opening_at_z_omega,
+            deserialized_proof.lookup_t_poly_opening_at_z_omega
+        );
+        assert_eq!(
+            proof.scheduler_proof.lookup_selector_poly_opening_at_z,
+            deserialized_proof.lookup_selector_poly_opening_at_z
+        );
+        assert_eq!(
+            proof.scheduler_proof.lookup_table_type_poly_opening_at_z,
+            deserialized_proof.lookup_table_type_poly_opening_at_z
+        );
+        assert_eq!(
+            proof.scheduler_proof.quotient_poly_opening_at_z,
+            deserialized_proof.quotient_poly_opening_at_z
+        );
+        assert_eq!(
+            proof.scheduler_proof.linearization_poly_opening_at_z,
+            deserialized_proof.linearization_poly_opening_at_z
+        );
+        assert_eq!(
+            proof.scheduler_proof.opening_proof_at_z,
+            deserialized_proof.opening_proof_at_z
+        );
+        assert_eq!(
+            proof.scheduler_proof.opening_proof_at_z_omega,
+            deserialized_proof.opening_proof_at_z_omega
+        );
+    }
 }

@@ -31,7 +31,7 @@ pub fn generate_inputs(
             batch_l1_data.curr_batch_commitment.to_fixed_bytes(),
         ]
     };
-    let encoded_input_params = input_fields.flatten();
+    let encoded_input_params = input_fields.into_iter().flatten().collect::<Vec<u8>>();
 
     let input_keccak_hash = to_fixed_bytes(Keccak256::digest(&encoded_input_params).as_slice());
     let input_u256 = U256::from_big_endian(&input_keccak_hash);
