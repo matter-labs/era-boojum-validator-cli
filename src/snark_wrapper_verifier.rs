@@ -12,8 +12,8 @@ use circuit_definitions::{
 };
 use colored::Colorize;
 use crypto::calculate_fflonk_verification_key_hash;
+use crypto::flonk::FflonkVerificationKey;
 use crypto::{calculate_verification_key_hash, types::ProofType};
-use fflonk::FflonkVerificationKey;
 use primitive_types::H256;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -104,8 +104,8 @@ pub async fn verify_snark(
                 return Err(StatusCode::FailedToLoadVerificationKey);
             }
 
-            use fflonk::verifier::verify;
-            let vk_inner: FflonkVerificationKey<
+            use crypto::flonk::verifier::verify;
+            let vk_inner: crypto::flonk::FflonkVerificationKey<
                 Bn256,
                 ZkSyncSnarkWrapperCircuitNoLookupCustomGate,
             > = serde_json::from_str(&verification_key.as_ref().unwrap()).unwrap();

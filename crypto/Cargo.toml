@@ -20,6 +20,9 @@ zksync_types = { git = "https://github.com/matter-labs/zksync-era.git", branch =
 zksync_pairing = "=0.31.0"
 zksync_ff = "=0.31.0"
 
+num-bigint = { version = "0.4", features = ["serde"] }
+num-traits = "0.2"
+
 hex = "*"
 bincode = { version = "2.0.0", features = ["serde"] }
 colored = "2.0"

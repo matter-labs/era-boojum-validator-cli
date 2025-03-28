@@ -11,15 +11,14 @@ use circuit_definitions::{
         CurveAffine, Engine, PrimeField,
     },
 };
-use fflonk::{
-    bellman::Field,
-    {FflonkProof, FflonkVerificationKey},
-};
+
+use flonk::{FflonkProof, FflonkVerificationKey};
 use primitive_types::H256;
-use zksync_pairing::{bn256::Fr, ff::from_hex};
+use zksync_pairing::bn256::Fr;
 
 pub mod serialize;
 pub mod types;
+pub mod flonk;
 
 /// Transform an element represented as a U256 into a prime field element.
 fn hex_to_scalar<F: PrimeField>(el: &U256) -> F {
@@ -144,7 +143,7 @@ pub fn deserialize_fflonk_proof(
     mut proof: Vec<U256>,
 ) -> FflonkProof<Bn256, ZkSyncSnarkWrapperCircuitNoLookupCustomGate> {
     let serialized_product = proof.pop().unwrap();
-    let _product = deserialize_fe(serialized_product);
+    let product = deserialize_fe(serialized_product);
 
     let mut evaluations = vec![];
     for _ in 0..15 {
@@ -166,40 +165,10 @@ pub fn deserialize_fflonk_proof(
     let mut proof: FflonkProof<Bn256, ZkSyncSnarkWrapperCircuitNoLookupCustomGate> =
         FflonkProof::empty();
         
-    dbg!(evaluations.clone().len());
     proof.commitments = commitments;
     proof.evaluations = evaluations;
 
-
-    let lagrange_inverses = vec![
-        from_hex::<Fr>("2aa0b808af4b4cf7459acd1242deffbe0635b9b61dd07a5bdbd6a5e64722d9eb").unwrap(),
-        from_hex::<Fr>("04c78a2a55d26ca00ac6c81a7034a45aff01767a6325fc688ad73a88c20e7b90").unwrap(),
-        from_hex::<Fr>("2ca357ec2ad41182182ba0bf51b4064f9d81ddff0c5f4dc50eac3f6bb34f462e").unwrap(),
-        from_hex::<Fr>("1fa0ae7e31ffcec65be121ece559f9fbb34ae6fecd7529e50e30cf0fcd1d456f").unwrap(),
-        from_hex::<Fr>("084b4f868de36f1b785a2bd8485dadc3a9379a9565c862b9da5fd54eeffbab58").unwrap(),
-        from_hex::<Fr>("08fd242f48351f9550cb7207d93f03620007f16ddb2faa56f54721e44291bb0b").unwrap(),
-        from_hex::<Fr>("1defbd7f02f3f44b835b1bcb495e00312f897b9d0c9e38f71607264866f7ebf9").unwrap(),
-        from_hex::<Fr>("17019857407365df3fdd7d7a1d541f78c66e90a35b12bfb72deceec1380fc049").unwrap(),
-        from_hex::<Fr>("28ebc69f2f4b56856de00b67b0753bf6c4f9cc2f81a643f2cd4625f789375406").unwrap(),
-        from_hex::<Fr>("1909b80e40ac6ff599a70ce92373bb699734a6348ef401c4f1b646ff7ac98221").unwrap(),
-        from_hex::<Fr>("28d3fee68dadff8d9792128351cb25741223a72f0d57ffeb5fa6261dfad4b52c").unwrap(),
-        from_hex::<Fr>("1b42778d2e4a262a9b82d35a6fb04987781275793188ba7d6fdcce70bb012dce").unwrap(),
-        from_hex::<Fr>("1d9b8f467da3835561187d58aec32cf8678d439635c6dff68be239716e5fb3bc").unwrap(),
-        from_hex::<Fr>("0b31d349c44fe72cb4ac65e05677dbd4ceeac309816e1110bbd651ff7af70a72").unwrap(),
-        from_hex::<Fr>("2488041da3c41e1ef004498f9516ce6a944d2f76d90c3e3f55553b44609659d2").unwrap(),
-        from_hex::<Fr>("2960b2577f0fb7a28724442fc9afd810b6d1034357f6ee3e79449332e3a65aab").unwrap(),
-        from_hex::<Fr>("0d2fe6f1cbced57abf849dac3bfc86510ddd43f967b6172648c7dc5a5625e9e0").unwrap(),
-        from_hex::<Fr>("0e2b84a195708caadb467c542a4191d3af605ef6484a8803e43222f85cc0603e").unwrap(),
-    ];
-
-    let mut product = lagrange_inverses[0];
-    for i in 1..lagrange_inverses.len() {
-        product.mul_assign(&lagrange_inverses[i]);
-    }
-
-    assert_eq!(product, _product);
-
-    proof.lagrange_basis_inverses = lagrange_inverses;
+    proof.montgomery_inverse = product;
 
     proof
 }

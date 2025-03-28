@@ -927,6 +927,8 @@ dependencies = [
  "ethers",
  "fflonk",
  "hex",
+ "num-bigint 0.4.6",
+ "num-traits",
  "once_cell",
  "primitive-types",
  "reqwest",
