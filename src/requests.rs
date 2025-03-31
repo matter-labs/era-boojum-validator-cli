@@ -1,10 +1,8 @@
 use std::str::FromStr;
 
 use circuit_definitions::boojum::field::goldilocks::GoldilocksField;
-use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
-use circuit_definitions::snark_wrapper::franklin_crypto::bellman::bn256::Bn256;
-use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
 use colored::Colorize;
+use crypto::types::ProofType;
 use ethers::abi::{Abi, Function};
 use ethers::contract::BaseContract;
 use ethers::providers::{Http, Middleware, Provider};
@@ -33,6 +31,7 @@ pub static BLOCK_COMMIT_EVENT_SIGNATURE: Lazy<H256> = Lazy::new(|| {
     )
 });
 
+#[allow(dead_code)]
 #[derive(Debug, Default, Clone)]
 pub struct BatchL1Data {
     pub previous_enumeration_counter: u64,
@@ -49,11 +48,11 @@ pub struct BatchL1Data {
     pub curr_batch_commitment: H256,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct L1BatchAndProofData {
     pub batch_l1_data: BatchL1Data,
     pub aux_output: BlockAuxilaryOutput,
-    pub scheduler_proof: Proof<Bn256, ZkSyncSnarkWrapperCircuit>,
+    pub scheduler_proof: ProofType,
     pub verifier_params: VerifierParams,
     pub block_number: u64,
 }
@@ -333,6 +332,8 @@ pub async fn fetch_batch_commit_tx(
     let domain;
     if network == "sepolia" {
         domain = "https://sepolia.era.zksync.dev";
+    } else if network == "stage-proofs" {
+        domain = "https://dev-api.era-stage-proofs.zksync.dev"
     } else {
         domain = "https://mainnet.era.zksync.io";
     }
@@ -387,6 +388,8 @@ pub async fn fetch_batch_protocol_version(
     let domain;
     if network == "sepolia" {
         domain = "https://sepolia.era.zksync.dev";
+    } else if network == "stage-proofs" {
+        domain = "https://dev-api.era-stage-proofs.zksync.dev"
     } else {
         domain = "https://mainnet.era.zksync.io";
     }

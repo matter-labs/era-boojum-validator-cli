@@ -1,44 +1,110 @@
 [
   {
-    "inputs": [],
-    "name": "verificationKeyHash",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "vkHash",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "pure",
-    "type": "function"
+      "type": "constructor",
+      "inputs": [
+          {
+              "name": "_fflonkVerifier",
+              "type": "address",
+              "internalType": "contract IVerifierV2"
+          },
+          {
+              "name": "_plonkVerifier",
+              "type": "address",
+              "internalType": "contract IVerifier"
+          }
+      ],
+      "stateMutability": "nonpayable"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256[]",
-        "name": "",
-        "type": "uint256[]"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "",
-        "type": "uint256[]"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "",
-        "type": "uint256[]"
-      }
-    ],
-    "name": "verify",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
+      "type": "function",
+      "name": "FFLONK_VERIFIER",
+      "inputs": [],
+      "outputs": [
+          {
+              "name": "",
+              "type": "address",
+              "internalType": "contract IVerifierV2"
+          }
+      ],
+      "stateMutability": "view"
+  },
+  {
+      "type": "function",
+      "name": "PLONK_VERIFIER",
+      "inputs": [],
+      "outputs": [
+          {
+              "name": "",
+              "type": "address",
+              "internalType": "contract IVerifier"
+          }
+      ],
+      "stateMutability": "view"
+  },
+  {
+      "type": "function",
+      "name": "verificationKeyHash",
+      "inputs": [],
+      "outputs": [
+          {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+          }
+      ],
+      "stateMutability": "view"
+  },
+  {
+      "type": "function",
+      "name": "verificationKeyHash",
+      "inputs": [
+          {
+              "name": "_verifierType",
+              "type": "uint256",
+              "internalType": "uint256"
+          }
+      ],
+      "outputs": [
+          {
+              "name": "",
+              "type": "bytes32",
+              "internalType": "bytes32"
+          }
+      ],
+      "stateMutability": "view"
+  },
+  {
+      "type": "function",
+      "name": "verify",
+      "inputs": [
+          {
+              "name": "_publicInputs",
+              "type": "uint256[]",
+              "internalType": "uint256[]"
+          },
+          {
+              "name": "_proof",
+              "type": "uint256[]",
+              "internalType": "uint256[]"
+          }
+      ],
+      "outputs": [
+          {
+              "name": "",
+              "type": "bool",
+              "internalType": "bool"
+          }
+      ],
+      "stateMutability": "view"
+  },
+  {
+      "type": "error",
+      "name": "EmptyProofLength",
+      "inputs": []
+  },
+  {
+      "type": "error",
+      "name": "UnknownVerifierType",
+      "inputs": []
   }
 ]

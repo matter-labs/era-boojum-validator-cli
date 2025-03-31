@@ -1,10 +1,9 @@
-use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
-use circuit_definitions::snark_wrapper::franklin_crypto::bellman::bn256::Bn256;
-use circuit_definitions::snark_wrapper::franklin_crypto::bellman::plonk::better_better_cs::proof::Proof;
-use crypto::deserialize_proof;
+use crypto::{deserialize_fflonk_proof, deserialize_proof, types::ProofType};
 use ethers::abi::{Function, ParamType, Token};
 use once_cell::sync::Lazy;
 use primitive_types::U256;
+
+use crate::contract::FFLONK_VERIFICATION_TYPE;
 
 static COMMIT_BATCH_INFO_PARAMS: Lazy<ParamType> = Lazy::new(|| {
     ParamType::Tuple(vec![
@@ -34,6 +33,7 @@ static STORED_BATCH_INFO_PARAMS: Lazy<ParamType> = Lazy::new(|| {
     ])
 });
 
+#[allow(dead_code)]
 pub struct CommitBatchInfo {
     pub batch_number: U256,
     pub timestamp: U256,
@@ -165,7 +165,7 @@ pub fn parse_batch_proof(
     calldata: &[u8],
     protocol_version: u16,
     network: &str,
-) -> Option<Proof<Bn256, ZkSyncSnarkWrapperCircuit>> {
+) -> Option<ProofType> {
     let parsed_input = function.decode_input(&calldata[4..]).unwrap();
 
     if protocol_version < 26 {
@@ -194,7 +194,7 @@ pub fn parse_batch_proof(
             return None;
         }
 
-        Some(deserialize_proof(proof))
+        Some(ProofType::Plonk(deserialize_proof(proof)))
     } else {
         let Token::Bytes(proof_data) = parsed_input.as_slice().last().unwrap() else {
             return None;
@@ -240,6 +240,16 @@ pub fn parse_batch_proof(
             return None;
         }
 
-        Some(deserialize_proof(proof))
+        if protocol_version == 26 {
+            return Some(ProofType::Plonk(deserialize_proof(proof)));
+        }
+
+        if proof[0] == FFLONK_VERIFICATION_TYPE {
+            Some(ProofType::Fflonk(deserialize_fflonk_proof(
+                proof[1..].to_vec(),
+            )))
+        } else {
+            Some(ProofType::Plonk(deserialize_proof(proof[1..].to_vec())))
+        }
     }
 }
