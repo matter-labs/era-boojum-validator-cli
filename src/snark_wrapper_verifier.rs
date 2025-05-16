@@ -207,22 +207,21 @@ fn check_verification_key(
     verification_key: VerificationKey<Bn256, ZkSyncSnarkWrapperCircuit>,
     vk_hash_from_l1: Option<H256>,
 ) -> Result<H256, StatusCode> {
-    if vk_hash_from_l1.is_none() {
-        println!("Supplied vk hash is None, skipping check...");
-        return Ok(H256::default());
-    }
-
     let computed_vk_hash = calculate_verification_key_hash(verification_key);
 
     println!("=== Verification Key Hash Check:");
     println!(
         "  Verification Key Hash from L1:       0x{:}",
-        hex::encode(vk_hash_from_l1.unwrap())
+        hex::encode(vk_hash_from_l1.unwrap_or_default())
     );
     println!(
         "  Computed Verification Key Hash:      0x{:}",
         hex::encode(computed_vk_hash)
     );
+    if vk_hash_from_l1.is_none() {
+        println!("Supplied vk hash is None, skipping check...");
+        return Ok(H256::default());
+    }
 
     assert_eq!(
         computed_vk_hash,
@@ -242,22 +241,22 @@ fn check_fflonk_verification_key(
     verification_key: FflonkVerificationKey<Bn256, ZkSyncSnarkWrapperCircuitNoLookupCustomGate>,
     vk_hash_from_l1: Option<H256>,
 ) -> Result<H256, StatusCode> {
-    if vk_hash_from_l1.is_none() {
-        println!("Supplied vk hash is None, skipping check...");
-        return Ok(H256::default());
-    }
-
     let computed_vk_hash = calculate_fflonk_verification_key_hash(verification_key);
 
     println!("=== Verification Key Hash Check:");
     println!(
         "  Verification Key Hash from L1:       0x{:}",
-        hex::encode(vk_hash_from_l1.unwrap())
+        hex::encode(vk_hash_from_l1.unwrap_or_default())
     );
     println!(
         "  Computed Verification Key Hash:      0x{:}",
         hex::encode(computed_vk_hash)
     );
+
+    if vk_hash_from_l1.is_none() {
+        println!("Supplied vk hash is None, skipping check...");
+        return Ok(H256::default());
+    }
 
     assert_eq!(
         computed_vk_hash,
