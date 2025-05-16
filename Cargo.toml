@@ -11,6 +11,7 @@ codegen = { package = "zksync_solidity_vk_codegen", version = "=0.31.0" }
 
 zksync_types = { git = "https://github.com/matter-labs/zksync-era.git", branch = "main", package = "zksync_types" }
 fflonk = "=0.31.0"
+zksync_pairing = "=0.31.0"
 
 hex = "*"
 bincode = { version = "2.0.0", features = ["serde"] }

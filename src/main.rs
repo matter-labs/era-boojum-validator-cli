@@ -1,5 +1,6 @@
 #![feature(array_chunks)]
 
+use boojum_os::verify_snark_boojum_os;
 use circuit_definitions::circuit_definitions::recursion_layer::scheduler::ConcreteSchedulerCircuitBuilder;
 
 use clap::{Parser, Subcommand};
@@ -12,6 +13,7 @@ use std::io::Read;
 use std::{fs::File, process};
 
 mod batch;
+mod boojum_os;
 mod contract;
 mod inputs;
 mod outputs;
@@ -76,6 +78,7 @@ enum Commands {
     /// Verify the proof of the Snark wrapper (which is a wrapped FRI proof).
     VerifySnarkWrapper(VerifySnarkWrapperArgs),
     GenerateSolidityTest(GenerateSolidityTestArgs),
+    VerifySnarkBoojumOs(VerifySnarkWrapperArgs),
 }
 
 #[derive(Parser, Debug)]
@@ -101,6 +104,15 @@ pub fn proof_from_file<T: for<'a> Deserialize<'a>>(proof_path: &str) -> T {
 
     let (proof, _) =
         bincode::serde::decode_from_slice(&buffer.as_slice(), bincode::config::legacy()).unwrap();
+    proof
+}
+
+pub fn proof_from_json_file<T: for<'a> Deserialize<'a>>(proof_path: &str) -> T {
+    let mut file = File::open(proof_path).unwrap();
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).unwrap();
+
+    let proof = serde_json::from_slice::<T>(&buffer).unwrap();
     proof
 }
 
@@ -151,6 +163,7 @@ async fn main() {
         let result = match command {
             Commands::VerifySnarkWrapper(args) => verify_snark_from_storage(&args).await.err(),
             Commands::GenerateSolidityTest(args) => generate_solidity_test(&args).await.err(),
+            Commands::VerifySnarkBoojumOs(args) => verify_snark_boojum_os(&args).await.err(),
         };
         if let Some(error) = result {
             println!("Command failed: {:?}", error);

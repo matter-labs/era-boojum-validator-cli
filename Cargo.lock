@@ -1293,6 +1293,7 @@ dependencies = [
  "serde_repr",
  "sha3 0.10.8",
  "tokio",
+ "zksync_pairing",
  "zksync_solidity_vk_codegen",
  "zksync_types",
 ]
