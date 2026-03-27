@@ -171,6 +171,12 @@ WARNING: This verifier is still WIP, so command arguments will change.
 cargo run  -- verify-snark-wrapper example_proofs/snark_wrapper/l1_batch_proof_1.bin example_proofs/snark_wrapper/snark_verification_scheduler_key.json
 ```
 
+If you already have the raw JSON proof and VK produced by `zkos-wrapper`, use the adapter command instead:
+
+```shell
+cargo run -- verify-snark-wrapper-json ../zkos-wrapper/wrapper/testing_data/snark_wrapper_proof_80sb ../zkos-wrapper/wrapper/testing_data/snark_wrapper_vk_80sb
+```
+
 You can also generate the solidity test for Verifier.sol, by running:
 
 ```shell

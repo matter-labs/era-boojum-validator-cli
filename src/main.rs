@@ -28,7 +28,8 @@ use crate::outputs::{
 };
 use crate::requests::L1BatchAndProofData;
 use crate::snark_wrapper_verifier::{
-    generate_solidity_test, verify_snark, verify_snark_from_storage, L1BatchProofForL1,
+    generate_solidity_test, verify_snark, verify_snark_from_json, verify_snark_from_storage,
+    L1BatchProofForL1,
 };
 use crate::utils::ensure_key_file_exists;
 use crate::utils::{check_verification_key, get_scheduler_key_override};
@@ -77,6 +78,8 @@ struct Cli {
 enum Commands {
     /// Verify the proof of the Snark wrapper (which is a wrapped FRI proof).
     VerifySnarkWrapper(VerifySnarkWrapperArgs),
+    /// Verify a raw JSON SNARK proof/VK pair produced by zkos-wrapper.
+    VerifySnarkWrapperJson(VerifySnarkWrapperJsonArgs),
     GenerateSolidityTest(GenerateSolidityTestArgs),
     VerifySnarkBoojumOs(VerifySnarkWrapperArgs),
 }
@@ -88,6 +91,14 @@ pub struct VerifySnarkWrapperArgs {
     /// Snark verification scheduler key (like snark_verification_scheduler_key.json)
     snark_vk_scheduler_key_file: String,
     fflonk_vk_scheduler_key_file: Option<String>,
+}
+
+#[derive(Parser, Debug)]
+pub struct VerifySnarkWrapperJsonArgs {
+    /// Path to the raw JSON proof file emitted by zkos-wrapper.
+    snark_proof_file: String,
+    /// Path to the raw JSON verification key emitted by zkos-wrapper.
+    snark_vk_scheduler_key_file: String,
 }
 
 #[derive(Parser, Debug)]
@@ -162,6 +173,7 @@ async fn main() {
         // Expert commands
         let result = match command {
             Commands::VerifySnarkWrapper(args) => verify_snark_from_storage(&args).await.err(),
+            Commands::VerifySnarkWrapperJson(args) => verify_snark_from_json(&args).await.err(),
             Commands::GenerateSolidityTest(args) => generate_solidity_test(&args).await.err(),
             Commands::VerifySnarkBoojumOs(args) => verify_snark_boojum_os(&args).await.err(),
         };
